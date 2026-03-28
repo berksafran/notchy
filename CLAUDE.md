@@ -26,8 +26,6 @@ Notchy is a macOS menu bar app that provides a floating terminal panel anchored 
 
 **Terminal status detection**: `ClickThroughTerminalView` (subclass of `LocalProcessTerminalView`) reads the terminal buffer on every `dataReceived` (debounced 150ms) and classifies the output into `TerminalStatus` states: `.working` (spinner chars + token counter), `.waitingForInput` (user prompt `❯`), `.interrupted`, `.idle`. The `idle → taskCompleted` transition uses a 3-second delay to avoid false positives from brief working→idle flickers.
 
-**AI status descriptions**: `StatusDescriptionGenerator` uses Apple's `FoundationModels` framework (macOS 26.0+) to generate short first-person status messages by reading the terminal buffer. Three specialized prompts handle working, waitingForInput, and taskCompleted states. Status descriptions have configurable expiry durations and are displayed in both the notch and tab bar.
-
 **Terminal embedding**: `TerminalManager` (singleton) owns a `[UUID: LocalProcessTerminalView]` dictionary. Terminals are created on demand, spawning the user's login shell, then sending `cd <project-dir> && clear && claude`. `TerminalSessionView` is an `NSViewRepresentable` that attaches/detaches the terminal view to a container based on the active session ID.
 
 **Panel**: `TerminalPanel` is an `NSPanel` (borderless, floating, non-activating) that shows/hides below the notch or status item. It hides on resign-key unless pinned. Supports Cmd+S for checkpoints. `PanelContentView` composes the tab bar and terminal area.
@@ -41,7 +39,6 @@ Notchy is a macOS menu bar app that provides a floating terminal panel anchored 
 ## Dependencies
 
 - **SwiftTerm** (`migueldeicaza/SwiftTerm`) — terminal emulator view (`LocalProcessTerminalView`)
-- **FoundationModels** (macOS 26.0+) — on-device AI for status description generation
 
 ## Entitlements
 

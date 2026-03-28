@@ -55,9 +55,6 @@ class SessionStore {
     private var pollingTimer: Timer?
     private static let pollingInterval: TimeInterval = 5
 
-    /// Timer that checks and clears expired status descriptions
-    private var statusExpiryTimer: Timer?
-
     var activeSession: TerminalSession? {
         sessions.first { $0.id == activeSessionId }
     }
@@ -65,27 +62,9 @@ class SessionStore {
     /// Currently open Xcode project names (refreshed on each scan)
     var activeXcodeProjects: Set<String> = []
 
-    /// The session whose status to show in the notch — prefers active session, falls back to any with status
-    var notchSession: TerminalSession? {
-        if let active = activeSession, active.statusDescription != nil {
-            return active
-        }
-        return sessions.first(where: { $0.statusDescription != nil })
-    }
-
-    /// The status description to show in the notch — from active session or any session with a status
-    var notchStatusDescription: String? {
-        notchSession?.statusDescription
-    }
-
-    /// The project name for the notch status
-    var notchProjectName: String? {
-        notchSession?.projectName
-    }
-
     /// The status color for the notch (matches tab bar colors)
     var notchStatusColor: NSColor {
-        guard let session = notchSession else { return .systemGreen }
+        guard let session = activeSession else { return .systemGreen }
         switch session.terminalStatus {
         case .waitingForInput: return .systemRed
         case .working: return .systemYellow
@@ -99,28 +78,6 @@ class SessionStore {
     init() {
         restoreSessions()
         updatePollingTimer()
-        startStatusExpiryTimer()
-    }
-
-    private func startStatusExpiryTimer() {
-        statusExpiryTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            self?.clearExpiredStatuses()
-        }
-    }
-
-    private func clearExpiredStatuses() {
-        let now = Date()
-        var changed = false
-        for i in sessions.indices {
-            if let expiry = sessions[i].statusExpiresAt, now >= expiry {
-                sessions[i].statusDescription = nil
-                sessions[i].statusExpiresAt = nil
-                changed = true
-            }
-        }
-        if changed {
-            NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
-        }
     }
 
     // MARK: - Session Persistence
@@ -313,10 +270,7 @@ class SessionStore {
             sessions[index].terminalStatus = status
             updateSleepPrevention()
 
-            // When a new task starts, immediately clear any stale status from the previous task
             if status == .working && previous != .working {
-                sessions[index].statusDescription = nil
-                sessions[index].statusExpiresAt = nil
                 sessions[index].workingStartedAt = Date()
             }
             if status == .waitingForInput && previous != .waitingForInput {
@@ -325,7 +279,6 @@ class SessionStore {
                     isTerminalExpanded = true
                     NotificationCenter.default.post(name: .NotchyExpandPanel, object: nil)
                 }
-                generateWaitingForInputDescription(for: id)
             }
             else if status == .taskCompleted && previous != .taskCompleted {
                 playSound(named: "taskCompleted")
@@ -342,106 +295,14 @@ class SessionStore {
                     if let started = workingStartedAt, Date().timeIntervalSince(started) < 10 {
                         return
                     }
-                    self.generateTaskCompletedDescription(for: id) {
-                        SessionStore.shared.updateTerminalStatus(id, status: .taskCompleted)
-                        // Auto-clear taskCompleted after 3 seconds
-                        Task { @MainActor in
-                            try? await Task.sleep(for: .seconds(3))
-                            guard let idx = self.sessions.firstIndex(where: { $0.id == id }),
-                                  self.sessions[idx].terminalStatus == .taskCompleted else { return }
-                            self.sessions[idx].terminalStatus = .idle
-                            NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
-                        }
-                    }
+                    SessionStore.shared.updateTerminalStatus(id, status: .taskCompleted)
+                    // Auto-clear taskCompleted after 3 seconds
+                    try? await Task.sleep(for: .seconds(3))
+                    guard let idx2 = self.sessions.firstIndex(where: { $0.id == id }),
+                          self.sessions[idx2].terminalStatus == .taskCompleted else { return }
+                    self.sessions[idx2].terminalStatus = .idle
+                    NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
                 }
-            }
-
-            // Trigger AI status description generation
-            generateStatusDescription(for: id, status: status)
-        }
-    }
-
-    private func generateWaitingForInputDescription(for id: UUID) {
-        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
-        let requestTime = Date()
-        sessions[index].statusRequestedAt = requestTime
-        let projectName = sessions[index].projectName
-        let visibleText = TerminalManager.shared.visibleText(for: id) ?? ""
-
-        if #available(macOS 26.0, *) {
-            let generator = StatusDescriptionGenerator.shared
-
-            Task { @MainActor in
-                guard let description = await generator.generateWaitingForInputStatus(
-                    for: id,
-                    visibleText: visibleText,
-                    projectName: projectName
-                ) else { return }
-
-                guard let idx = self.sessions.firstIndex(where: { $0.id == id }),
-                      self.sessions[idx].statusRequestedAt == requestTime else { return }
-                self.sessions[idx].statusDescription = description
-                self.sessions[idx].statusExpiresAt = Date().addingTimeInterval(120)
-                NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
-            }
-        }
-    }
-
-    private func generateTaskCompletedDescription(for id: UUID, complete: @escaping ()->Void ) {
-        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
-        let requestTime = Date()
-        sessions[index].statusRequestedAt = requestTime
-        let projectName = sessions[index].projectName
-        let visibleText = TerminalManager.shared.visibleText(for: id) ?? ""
-
-        if #available(macOS 26.0, *) {
-            let generator = StatusDescriptionGenerator.shared
-
-            Task { @MainActor in
-                guard let description = await generator.generateTaskCompletedStatus(
-                    for: id,
-                    visibleText: visibleText,
-                    projectName: projectName
-                ) else { return }
-
-                guard let idx = self.sessions.firstIndex(where: { $0.id == id }) else { return }
-                self.sessions[idx].statusDescription = description
-                self.sessions[idx].statusExpiresAt = Date().addingTimeInterval(6)
-                NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
-
-                complete()
-            }
-        }
-    }
-
-    private func generateStatusDescription(for id: UUID, status: TerminalStatus) {
-        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
-        let requestTime = Date()
-        sessions[index].statusRequestedAt = requestTime
-        let projectName = sessions[index].projectName
-        let visibleText = TerminalManager.shared.visibleText(for: id) ?? ""
-
-        if #available(macOS 26.0, *) {
-            let generator = StatusDescriptionGenerator.shared
-            let expiryDuration = generator.expiryDuration(for: status)
-
-            Task { @MainActor in
-                guard let description = await generator.generateStatus(
-                    for: id,
-                    visibleText: visibleText,
-                    terminalStatus: status,
-                    projectName: projectName
-                ) else { return }
-
-                guard let idx = self.sessions.firstIndex(where: { $0.id == id }),
-                      self.sessions[idx].statusRequestedAt == requestTime else { return }
-                self.sessions[idx].statusDescription = description
-                if let duration = expiryDuration {
-                    self.sessions[idx].statusExpiresAt = Date().addingTimeInterval(duration)
-                } else {
-                    self.sessions[idx].statusExpiresAt = nil
-                }
-                NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
             }
         }
     }

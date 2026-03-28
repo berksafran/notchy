@@ -24,12 +24,6 @@ struct TerminalSession: Identifiable {
     /// Whether the user has ever manually selected this tab
     var hasBeenSelected: Bool
     let createdAt: Date
-    /// AI-generated status description shown in the notch
-    var statusDescription: String?
-    /// When the status description should expire and be cleared
-    var statusExpiresAt: Date?
-    /// Timestamp of the most recent status generation request — used to discard stale AI responses
-    var statusRequestedAt: Date?
     /// When the session most recently entered the .working state
     var workingStartedAt: Date?
 
