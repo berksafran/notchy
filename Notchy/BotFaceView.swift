@@ -1,8 +1,9 @@
 import SwiftUI
 
 struct BotFaceView: View {
+
     var body: some View {
-        Image(.face)
+        Image("face")
             .resizable()
             .aspectRatio(contentMode: .fit)
             .clipped()
@@ -11,6 +12,7 @@ struct BotFaceView: View {
 
 #Preview {
     BotFaceView()
+        .frame(width: 200)
         .padding()
-        .background(Color.gray)
+        .background(Color.white)
 }

@@ -107,6 +107,7 @@ struct SessionTab: View {
             }
         }
         .onTapGesture(perform: onSelect)
+        .overlay(MiddleClickView { onClose() })
         .contextMenu {
 //            Button("Save Checkpoint") {
 //                SessionStore.shared.createCheckpointForActiveSession()
@@ -168,6 +169,40 @@ struct SessionTab: View {
         }
         .onChange(of: showRestoreConfirmation) {
             SessionStore.shared.isShowingDialog = showRenameDialog || showRestoreConfirmation
+        }
+    }
+}
+
+private struct MiddleClickView: NSViewRepresentable {
+    let action: () -> Void
+
+    func makeNSView(context: Context) -> MiddleClickNSView {
+        let view = MiddleClickNSView()
+        view.action = action
+        return view
+    }
+
+    func updateNSView(_ nsView: MiddleClickNSView, context: Context) {
+        nsView.action = action
+    }
+}
+
+private class MiddleClickNSView: NSView {
+    var action: (() -> Void)?
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // Only claim hits during middle-click so left clicks pass through to SwiftUI
+        guard let event = NSApp.currentEvent, event.type == .otherMouseDown || event.type == .otherMouseUp else {
+            return nil
+        }
+        return super.hitTest(point)
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        if event.buttonNumber == 2 {
+            action?()
+        } else {
+            super.otherMouseUp(with: event)
         }
     }
 }

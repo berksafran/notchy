@@ -70,6 +70,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if self.panelOpenedViaHover {
                 self.panelOpenedViaHover = false
                 self.stopHoverTracking()
+                // Panel is now in "click mode" — shrink the notch hover state
+                // since hover tracking is no longer managing it
+                self.notchWindow?.endHover()
             }
         }
     }

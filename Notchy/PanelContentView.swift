@@ -76,8 +76,8 @@ struct PanelContentView: View {
                     .frame(height: 12)
                     .overlay(
                         WindowDragArea(onDoubleClick: {
-                        sessionStore.isTerminalExpanded.toggle()
-                        onToggleExpand?()
+//                        sessionStore.isTerminalExpanded.toggle()
+//                        onToggleExpand?()
                         })
                             .frame(height: 200)
                     )
@@ -90,8 +90,8 @@ struct PanelContentView: View {
                     .frame(height: 12)
                     .overlay(
                         WindowDragArea(onDoubleClick: {
-                        sessionStore.isTerminalExpanded.toggle()
-                        onToggleExpand?()
+//                        sessionStore.isTerminalExpanded.toggle()
+//                        onToggleExpand?()
                         })
                             .frame(height: 200)
                     )

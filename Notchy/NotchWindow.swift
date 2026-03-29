@@ -195,18 +195,18 @@ class NotchWindow: NSPanel {
         // Bounce animation using display link
         let startFrame = frame
         let startTime = CACurrentMediaTime()
-        let duration: Double = 0.6
+        let duration: Double = 0.35
 
         let displayLink = CVDisplayLinkWrapper { [weak self] in
             guard let self else { return false }
             let elapsed = CACurrentMediaTime() - startTime
             let t = min(elapsed / duration, 1.0)
 
-            // Spring/bounce curve
-            let bounce = Self.bounceEase(t)
+            // Ease in-out
+            let ease = Self.easeInOut(t)
 
-            let currentX = startFrame.origin.x + (targetFrame.origin.x - startFrame.origin.x) * bounce
-            let currentWidth = startFrame.width + (targetFrame.width - startFrame.width) * bounce
+            let currentX = startFrame.origin.x + (targetFrame.origin.x - startFrame.origin.x) * ease
+            let currentWidth = startFrame.width + (targetFrame.width - startFrame.width) * ease
 
             DispatchQueue.main.async {
                 self.setFrame(
@@ -250,8 +250,8 @@ class NotchWindow: NSPanel {
             let elapsed = CACurrentMediaTime() - startTime
             let t = min(elapsed / duration, 1.0)
 
-            // Ease out
-            let ease = 1.0 - pow(1.0 - t, 3.0)
+            // Ease in-out
+            let ease = Self.easeInOut(t)
 
             let currentX = startFrame.origin.x + (targetFrame.origin.x - startFrame.origin.x) * ease
             let currentWidth = startFrame.width + (targetFrame.width - startFrame.width) * ease
@@ -271,11 +271,11 @@ class NotchWindow: NSPanel {
         displayLink.start()
     }
 
-    /// Spring / bounce easing — overshoots then settles
-    private static func bounceEase(_ t: Double) -> Double {
-        let omega = 12.0  // frequency
-        let zeta = 0.4    // damping
-        return 1.0 - exp(-zeta * omega * t) * cos(sqrt(1.0 - zeta * zeta) * omega * t)
+    /// Ease in-out (cubic)
+    private static func easeInOut(_ t: Double) -> Double {
+        return t < 0.5
+            ? 4.0 * t * t * t
+            : 1.0 - pow(-2.0 * t + 2.0, 3.0) / 2.0
     }
 
     // MARK: - Notch size detection
@@ -367,7 +367,7 @@ class NotchWindow: NSPanel {
     // MARK: - Hover grow / shrink
 
     private static let hoverGrowX: CGFloat = 0 + NotchPillView.earRadius * 2  // extra width for ear protrusions
-    private static let hoverGrowY: CGFloat = 2
+    private static let hoverGrowY: CGFloat = 0
 
     /// Applies hover grow offset to any frame.
     private func applyHoverGrow(to rect: NSRect) -> NSRect {
@@ -380,13 +380,32 @@ class NotchWindow: NSPanel {
     }
 
     private func hoverGrow() {
+        // Start ears at zero protrusion, then animate outward
+        pillView.earProtrusion = 0
         pillView.isHovered = true
         pillContentHost?.rootView = NotchPillContent(isHovering: true)
         setFrame(applyHoverGrow(to: frame), display: true)
+
+        // Animate ears growing outward from body edges
+        let targetProtrusion = NotchPillView.earRadius
+        let startTime = CACurrentMediaTime()
+        let duration: Double = 0.05
+        let displayLink = CVDisplayLinkWrapper { [weak self] in
+            guard let self else { return false }
+            let elapsed = CACurrentMediaTime() - startTime
+            let t = min(elapsed / duration, 1.0)
+            let protrusion = targetProtrusion * t
+            DispatchQueue.main.async {
+                self.pillView.earProtrusion = protrusion
+            }
+            return t < 1.0
+        }
+        displayLink.start()
     }
 
     private func hoverShrink() {
         pillView.isHovered = false
+        pillView.earProtrusion = 0
         pillContentHost?.rootView = NotchPillContent(isHovering: false)
         guard let screen = NSScreen.builtIn else { return }
         let screenFrame = screen.frame
@@ -444,7 +463,13 @@ class NotchPillView: NSView {
     }
 
     private let shapeLayer = CAShapeLayer()
+    private let earLayer = CAShapeLayer()
     static let earRadius: CGFloat = 10
+
+    /// Controls how far the ears protrude outward from the body (0 to earRadius).
+    var earProtrusion: CGFloat = 0 {
+        didSet { needsLayout = true }
+    }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -453,6 +478,9 @@ class NotchPillView: NSView {
         layer?.backgroundColor = .clear
         shapeLayer.fillColor = NSColor.black.cgColor
         layer?.addSublayer(shapeLayer)
+
+        earLayer.fillColor = NSColor.black.cgColor
+        layer?.addSublayer(earLayer)
     }
 
     required init?(coder: NSCoder) {
@@ -472,49 +500,53 @@ class NotchPillView: NSView {
         let ear = Self.earRadius
         shapeLayer.frame = CGRect(x: 0, y: 0, width: w, height: h)
 
-        let path = CGMutablePath()
+        // Hide separate ear layer — ears are now integrated into the body path
+        earLayer.isHidden = true
 
+        let bodyPath = CGMutablePath()
         if isHovered {
-            // Main body is inset by ear on each side; ears fill the extra space
-            let bodyLeft = ear
-            let bodyRight = w - ear
+            let p = earProtrusion  // 0 to earRadius — controls how far the curve extends
 
-            // Left ear tip (bottom-left corner of view)
-            path.move(to: CGPoint(x: 0, y: 0))
-            // Concave curve up into the main body's left edge
-            path.addQuadCurve(
-                to: CGPoint(x: bodyLeft, y: ear),
-                control: CGPoint(x: bodyLeft , y: 0)
+            // Single unified path: body + ear curves at bottom corners.
+            // As earProtrusion goes from 0 → earRadius, the bottom corners
+            // smoothly curve outward, giving the impression the notch is
+            // organically growing the ears.
+
+            // Bottom-left: concave curve from outer tip up to body edge
+            bodyPath.move(to: CGPoint(x: ear - p, y: 0))
+            bodyPath.addQuadCurve(
+                to: CGPoint(x: ear, y: p),
+                control: CGPoint(x: ear, y: 0)
             )
-            // Left edge up to top
-            path.addLine(to: CGPoint(x: bodyLeft, y: h))
+            // Left side up to top
+            bodyPath.addLine(to: CGPoint(x: ear, y: h))
             // Top edge
-            path.addLine(to: CGPoint(x: bodyRight, y: h))
-            // Right edge down
-            path.addLine(to: CGPoint(x: bodyRight, y: ear))
-            // Concave curve out to right ear tip
-            path.addQuadCurve(
-                to: CGPoint(x: w, y: 0),
-                control: CGPoint(x: bodyRight, y: 0)
+            bodyPath.addLine(to: CGPoint(x: w - ear, y: h))
+            // Right side down to ear
+            bodyPath.addLine(to: CGPoint(x: w - ear, y: p))
+            // Bottom-right: concave curve from body edge out to tip
+            bodyPath.addQuadCurve(
+                to: CGPoint(x: w - ear + p, y: 0),
+                control: CGPoint(x: w - ear, y: 0)
             )
+            bodyPath.closeSubpath()
         } else {
             let cr: CGFloat = 9.5
-            path.move(to: CGPoint(x: 0, y: h))
-            path.addLine(to: CGPoint(x: w, y: h))
-            path.addLine(to: CGPoint(x: w, y: cr))
-            path.addQuadCurve(
+            bodyPath.move(to: CGPoint(x: 0, y: h))
+            bodyPath.addLine(to: CGPoint(x: w, y: h))
+            bodyPath.addLine(to: CGPoint(x: w, y: cr))
+            bodyPath.addQuadCurve(
                 to: CGPoint(x: w - cr, y: 0),
                 control: CGPoint(x: w, y: 0)
             )
-            path.addLine(to: CGPoint(x: cr, y: 0))
-            path.addQuadCurve(
+            bodyPath.addLine(to: CGPoint(x: cr, y: 0))
+            bodyPath.addQuadCurve(
                 to: CGPoint(x: 0, y: cr),
                 control: CGPoint(x: 0, y: 0)
             )
-            path.closeSubpath()
+            bodyPath.closeSubpath()
         }
-
-        shapeLayer.path = path
+        shapeLayer.path = bodyPath
     }
 }
 
@@ -598,7 +630,7 @@ struct NotchPillContent: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
-        .offset(y: isHovering ? -3 : -2)
+        .offset(y: -2)//isHovering ? -3 : -2)
         .onChange(of: displayState) {
             NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
         }
