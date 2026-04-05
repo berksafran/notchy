@@ -47,8 +47,13 @@ struct GeneralTab: View {
                 .onChange(of: settings.showNotch) { _, newValue in
                     onShowNotchChanged?(newValue)
                 }
+            Toggle("Reveal panel on hover", isOn: $settings.revealOnHover)
+                .help("If disabled, click the notch or use the hotkey to open the terminal.")
             Toggle("Enable sounds", isOn: $settings.soundsEnabled)
         }
+        .toggleStyle(.switch)
+        .tint(.blue)
+        .environment(\.colorScheme, .dark)
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -72,6 +77,9 @@ struct IntegrationsTab: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .toggleStyle(.switch)
+        .tint(.blue)
+        .environment(\.colorScheme, .dark)
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -128,6 +136,7 @@ class SettingsWindowController {
         win.center()
         win.isReleasedWhenClosed = false
         win.level = .floating
+        win.appearance = NSAppearance(named: .darkAqua)
         win.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 

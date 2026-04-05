@@ -14,7 +14,7 @@ class TerminalPanel: NSPanel {
         self.sessionStore = sessionStore
 
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 400),
+            contentRect: NSRect(x: 0, y: 0, width: 864, height: 480),
             styleMask: [.borderless, .resizable, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: true
@@ -22,18 +22,18 @@ class TerminalPanel: NSPanel {
 
         isFloatingPanel = true
         level = .floating
-        isMovableByWindowBackground = false
+        isMovableByWindowBackground = true // Allow dragging by header
+        isMovable = true // Allow window to move
         backgroundColor = .clear
         hasShadow = true
         isOpaque = false
         animationBehavior = .none
         hidesOnDeactivate = false
-        minSize = NSSize(width: 480, height: 300)
+        minSize = NSSize(width: 660, height: 480) // Increased by 20%
 
         let contentView = PanelContentView(
             sessionStore: sessionStore,
-            onClose: { [weak self] in self?.hidePanel() },
-            onToggleExpand: { [weak self] in self?.handleToggleExpand() }
+            onClose: { [weak self] in self?.hidePanel() }
         )
         let hosting = ClickThroughHostingView(rootView: contentView)
         self.contentView = hosting
@@ -67,15 +67,45 @@ class TerminalPanel: NSPanel {
         )
     }
 
+    private func getNotchHeight(for screen: NSScreen) -> CGFloat {
+        if #available(macOS 12.0, *),
+           let left = screen.auxiliaryTopLeftArea,
+           let right = screen.auxiliaryTopRightArea {
+            return screen.frame.maxY - min(left.minY, right.minY)
+        }
+        return screen.frame.maxY - screen.visibleFrame.maxY
+    }
+
     func showPanel(below rect: NSRect) {
         if let screen = NSScreen.main {
             let panelWidth = frame.width
             let panelHeight = frame.height
             let x = rect.midX - panelWidth / 2
-            let y = screen.visibleFrame.maxY - panelHeight
-            setFrameOrigin(NSPoint(x: x, y: y))
+
+            let notchHeight = getNotchHeight(for: screen)
+            let isExpanded = SettingsManager.shared.layoutStyle == .expanded
+            // Expanded: panel covers the notch area (top of panel = top of screen).
+            // Classic: panel sits just below the notch with 8pt overlap to bridge the hover gap.
+            let finalY = isExpanded
+                ? screen.frame.maxY - panelHeight
+                : screen.frame.maxY - notchHeight - panelHeight + 8
+
+            if !isVisible {
+                alphaValue = 0.0
+                setFrameOrigin(NSPoint(x: x, y: finalY + 20))
+                makeKeyAndOrderFront(nil)
+                
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.25
+                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    animator().alphaValue = 1.0
+                    animator().setFrameOrigin(NSPoint(x: x, y: finalY))
+                }
+            } else {
+                setFrameOrigin(NSPoint(x: x, y: finalY))
+                makeKeyAndOrderFront(nil)
+            }
         }
-        makeKeyAndOrderFront(nil)
         NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
     }
 
@@ -84,14 +114,45 @@ class TerminalPanel: NSPanel {
         let panelWidth = frame.width
         let panelHeight = frame.height
         let x = screenFrame.midX - panelWidth / 2
-        let y = screenFrame.maxY - panelHeight
-        setFrameOrigin(NSPoint(x: x, y: y))
-        makeKeyAndOrderFront(nil)
+
+        let notchHeight = getNotchHeight(for: screen)
+        let isExpanded = SettingsManager.shared.layoutStyle == .expanded
+        let finalY = isExpanded
+            ? screenFrame.maxY - panelHeight
+            : screenFrame.maxY - notchHeight - panelHeight + 8
+
+        if !isVisible {
+            alphaValue = 0.0
+            setFrameOrigin(NSPoint(x: x, y: finalY + 20))
+            makeKeyAndOrderFront(nil)
+            
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.25
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                animator().alphaValue = 1.0
+                animator().setFrameOrigin(NSPoint(x: x, y: finalY))
+            }
+        } else {
+            setFrameOrigin(NSPoint(x: x, y: finalY))
+            makeKeyAndOrderFront(nil)
+        }
         NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
     }
 
     func hidePanel() {
-        orderOut(nil)
+        guard isVisible else { return }
+        
+        let startY = frame.origin.y
+        let endY = startY + 20
+        
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.2
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            animator().alphaValue = 0.0
+            animator().setFrameOrigin(NSPoint(x: frame.origin.x, y: endY))
+        }) { [weak self] in
+            self?.orderOut(nil)
+        }
     }
 
     private func handleToggleExpand() {

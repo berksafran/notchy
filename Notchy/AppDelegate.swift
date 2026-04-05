@@ -22,6 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             setupNotchWindow()
         }
         setupHotkey()
+        observeLayoutStyleChanges()
         // Detect in background so launch isn't blocked
         sessionStore.detectAllXcodeProjectsAsync()
     }
@@ -68,12 +69,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func observeLayoutStyleChanges() {
+        NotificationCenter.default.addObserver(
+            forName: .NotchyLayoutStyleChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.applyLayoutStyle()
+        }
+    }
+
+    private func applyLayoutStyle() {
+        // Both classic and expanded use the NotchWindow (Hap)
+        if settings.showNotch && notchWindow == nil {
+            setupNotchWindow()
+        }
+        // Re-position the Hap for the new layout style
+        notchWindow?.layoutDidChange()
+    }
+
     private func setupNotchWindow() {
         notchWindow = NotchWindow { [weak self] in
             self?.notchHovered()
         }
         notchWindow?.isPanelVisible = { [weak self] in
             self?.panel.isVisible ?? false
+        }
+        notchWindow?.panelWidth = { [weak self] in
+            self?.panel.frame.width ?? 864
         }
     }
 

@@ -6,7 +6,7 @@ extension Notification.Name {
     static let NotchyHidePanel = Notification.Name("NotchyHidePanel")
     static let NotchyExpandPanel = Notification.Name("NotchyExpandPanel")
     static let NotchyNotchStatusChanged = Notification.Name("NotchyNotchStatusChanged")
-
+    static let NotchyLayoutStyleChanged = Notification.Name("NotchyLayoutStyleChanged")
 }
 
 @Observable
@@ -28,6 +28,7 @@ class SessionStore {
     var isWindowFocused = true
     var isShowingDialog = false
     var hasCompletedInitialDetection = false
+    var activeTab: PanelTab = .terminal
 
     /// The most recent checkpoint for the active session, used to show the undo button
     var lastCheckpoint: Checkpoint?

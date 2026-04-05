@@ -85,6 +85,16 @@ struct SessionTab: View {
                     .lineLimit(1)
                     .foregroundColor(.white.opacity(foregroundOpacity))
             }
+            
+            // Close button (visible on hover)
+            Button(action: { onClose() }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+            .buttonStyle(.plain)
+            .opacity(isHovering ? 1.0 : 0.0)
+            .padding(.leading, 2)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 5)

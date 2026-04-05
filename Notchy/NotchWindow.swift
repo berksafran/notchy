@@ -16,6 +16,8 @@ class NotchWindow: NSPanel {
     /// Closure to check if the main panel is currently visible.
     /// When the panel is visible, the notch stays in hover-grown size.
     var isPanelVisible: (() -> Bool)?
+    /// Returns the current width of the main panel, used to match the notch hover width.
+    var panelWidth: (() -> CGFloat)?
 
     /// Detected notch dimensions (updated on screen change).
     private var notchWidth: CGFloat = 180
@@ -35,6 +37,8 @@ class NotchWindow: NSPanel {
 
     /// SwiftUI content overlay shown inside the pill when expanded
     private var pillContentHost: NSHostingView<NotchPillContent>?
+    
+    private var activeDisplayLink: CVDisplayLinkWrapper?
 
     init(onHover: @escaping () -> Void) {
         self.onHover = onHover
@@ -197,6 +201,7 @@ class NotchWindow: NSPanel {
         let startTime = CACurrentMediaTime()
         let duration: Double = 0.35
 
+        activeDisplayLink?.stop()
         let displayLink = CVDisplayLinkWrapper { [weak self] in
             guard let self else { return false }
             let elapsed = CACurrentMediaTime() - startTime
@@ -206,16 +211,19 @@ class NotchWindow: NSPanel {
             let ease = Self.easeInOut(t)
 
             let currentX = startFrame.origin.x + (targetFrame.origin.x - startFrame.origin.x) * ease
+            let currentY = startFrame.origin.y + (targetFrame.origin.y - startFrame.origin.y) * ease
             let currentWidth = startFrame.width + (targetFrame.width - startFrame.width) * ease
+            let currentHeight = startFrame.height + (targetFrame.height - startFrame.height) * ease
 
             DispatchQueue.main.async {
                 self.setFrame(
-                    NSRect(x: currentX, y: targetFrame.origin.y, width: currentWidth, height: targetFrame.height),
+                    NSRect(x: currentX, y: currentY, width: currentWidth, height: currentHeight),
                     display: true
                 )
             }
             return t < 1.0
         }
+        activeDisplayLink = displayLink
         displayLink.start()
     }
 
@@ -245,6 +253,7 @@ class NotchWindow: NSPanel {
         let startTime = CACurrentMediaTime()
         let duration: Double = 0.3
 
+        activeDisplayLink?.stop()
         let displayLink = CVDisplayLinkWrapper { [weak self] in
             guard let self else { return false }
             let elapsed = CACurrentMediaTime() - startTime
@@ -254,20 +263,23 @@ class NotchWindow: NSPanel {
             let ease = Self.easeInOut(t)
 
             let currentX = startFrame.origin.x + (targetFrame.origin.x - startFrame.origin.x) * ease
+            let currentY = startFrame.origin.y + (targetFrame.origin.y - startFrame.origin.y) * ease
             let currentWidth = startFrame.width + (targetFrame.width - startFrame.width) * ease
+            let currentHeight = startFrame.height + (targetFrame.height - startFrame.height) * ease
 
             DispatchQueue.main.async {
                 self.setFrame(
-                    NSRect(x: currentX, y: targetFrame.origin.y, width: currentWidth, height: targetFrame.height),
+                    NSRect(x: currentX, y: currentY, width: currentWidth, height: currentHeight),
                     display: true
                 )
                 if t >= 1.0 {
-                    // Show the idle content once collapse animation finishes
+                    // Restore content once collapse animation finishes
                     self.pillContentHost?.alphaValue = 1
                 }
             }
             return t < 1.0
         }
+        activeDisplayLink = displayLink
         displayLink.start()
     }
 
@@ -302,9 +314,14 @@ class NotchWindow: NSPanel {
     private func positionAtNotch() {
         guard let screen = NSScreen.builtIn else { return }
         let screenFrame = screen.frame
-        let x = screenFrame.midX - notchWidth / 2
+        let baseWidth = isExpandedLayout ? (panelWidth?() ?? notchWidth) : notchWidth
+        let x = screenFrame.midX - baseWidth / 2
         let y = screenFrame.maxY - notchHeight
-        setFrame(NSRect(x: x, y: y, width: notchWidth, height: notchHeight), display: true)
+        setFrame(NSRect(x: x, y: y, width: baseWidth, height: notchHeight), display: true)
+    }
+
+    private var isExpandedLayout: Bool {
+        SettingsManager.shared.layoutStyle == .expanded
     }
 
     // MARK: - Mouse tracking
@@ -327,12 +344,24 @@ class NotchWindow: NSPanel {
         // Check the notch area itself
         guard let screen = NSScreen.builtIn else { return }
         let screenFrame = screen.frame
-        let effectiveWidth = isExpanded ? notchWidth + 80 : notchWidth
+        
+        let currentWidth: CGFloat
+        if isExpandedLayout {
+            currentWidth = panelWidth?() ?? notchWidth
+        } else if isHovered {
+            currentWidth = panelWidth?() ?? notchWidth + 160
+        } else if isExpanded {
+            currentWidth = notchWidth + 80
+        } else {
+            currentWidth = notchWidth
+        }
+        let currentHeight = isHovered ? notchHeight + Self.hoverGrowY : notchHeight
+        
         let notchRect = NSRect(
-            x: screenFrame.midX - effectiveWidth / 2,
-            y: screenFrame.maxY - notchHeight,
-            width: effectiveWidth,
-            height: notchHeight + 1  // +1 so the top screen edge (maxY) is inside the rect
+            x: screenFrame.midX - currentWidth / 2,
+            y: screenFrame.maxY - currentHeight,
+            width: currentWidth,
+            height: currentHeight + 1  // +1 so the top screen edge (maxY) is inside the rect
         )
 
         let mouseInNotch = notchRect.contains(mouseLocation)
@@ -343,7 +372,11 @@ class NotchWindow: NSPanel {
                 isHovered = true
                 hoverGrow()
             }
-            onHover?()
+            
+            // Only trigger panel reveal automatically if the setting is enabled
+            if SettingsManager.shared.revealOnHover {
+                onHover?()
+            }
             return
         }
 
@@ -357,6 +390,12 @@ class NotchWindow: NSPanel {
         }
     }
 
+    /// Called when the layout style changes — re-positions the Hap for the new style.
+    func layoutDidChange() {
+        isHovered = false
+        positionAtNotch()
+    }
+
     /// Called when the panel hides — forces the notch back to normal size.
     func endHover() {
         guard isHovered else { return }
@@ -366,47 +405,71 @@ class NotchWindow: NSPanel {
 
     // MARK: - Hover grow / shrink
 
-    private static let hoverGrowX: CGFloat = 0 + NotchPillView.earRadius * 2  // extra width for ear protrusions
-    private static let hoverGrowY: CGFloat = 2
+    private static let hoverGrowY: CGFloat = 6 // Grow slightly downwards to bridge any gap with the panel
 
-    /// Applies hover grow offset to any frame.
+    /// Applies hover grow: expands the notch to match the panel width (or a sensible fallback).
     private func applyHoverGrow(to rect: NSRect) -> NSRect {
-        NSRect(
-            x: rect.origin.x - Self.hoverGrowX / 2,
-            y: rect.origin.y - Self.hoverGrowY,
-            width: rect.width + Self.hoverGrowX,
-            height: rect.height + Self.hoverGrowY
+        guard let screen = NSScreen.builtIn else {
+            return rect
+        }
+        let screenFrame = screen.frame
+        let targetWidth = panelWidth?() ?? notchWidth + 160
+        return NSRect(
+            x: screenFrame.midX - targetWidth / 2,
+            y: screenFrame.maxY - notchHeight - Self.hoverGrowY,
+            width: targetWidth,
+            height: notchHeight + Self.hoverGrowY
         )
     }
 
     private func hoverGrow() {
-        // Start ears at zero protrusion, then animate outward
-        pillView.earProtrusion = 0
+        if isExpandedLayout {
+            // In expanded layout the Hap is always at panel width — no grow animation needed
+            NotchPillModel.shared.isHovering = true
+            return
+        }
         pillView.isHovered = true
-        pillContentHost?.rootView = NotchPillContent(isHovering: true)
-        setFrame(applyHoverGrow(to: frame), display: true)
+        NotchPillModel.shared.isHovering = true
+        
+        let startFrame = frame
+        let targetFrame = applyHoverGrow(to: frame)
 
-        // Animate ears growing outward from body edges
         let targetProtrusion = NotchPillView.earRadius
+        let startProtrusion = pillView.earProtrusion
+        
         let startTime = CACurrentMediaTime()
-        let duration: Double = 0.15
+        let duration: Double = 0.25 // Smooth dynamic island style duration
+        
+        activeDisplayLink?.stop()
         let displayLink = CVDisplayLinkWrapper { [weak self] in
             guard let self else { return false }
             let elapsed = CACurrentMediaTime() - startTime
             let t = min(elapsed / duration, 1.0)
-            let protrusion = targetProtrusion * t
+            let ease = Self.easeInOut(t)
+            
+            let protrusion = startProtrusion + (targetProtrusion - startProtrusion) * ease
+            
+            let currentX = startFrame.origin.x + (targetFrame.origin.x - startFrame.origin.x) * ease
+            let currentY = startFrame.origin.y + (targetFrame.origin.y - startFrame.origin.y) * ease
+            let currentWidth = startFrame.width + (targetFrame.width - startFrame.width) * ease
+            let currentHeight = startFrame.height + (targetFrame.height - startFrame.height) * ease
+            
             DispatchQueue.main.async {
                 self.pillView.earProtrusion = protrusion
+                self.setFrame(NSRect(x: currentX, y: currentY, width: currentWidth, height: currentHeight), display: true)
             }
             return t < 1.0
         }
+        activeDisplayLink = displayLink
         displayLink.start()
     }
 
     private func hoverShrink() {
-        pillView.isHovered = false
-        pillView.earProtrusion = 0
-        pillContentHost?.rootView = NotchPillContent(isHovering: false)
+        NotchPillModel.shared.isHovering = false
+        if isExpandedLayout {
+            // In expanded layout the Hap stays at panel width — no shrink
+            return
+        }
         guard let screen = NSScreen.builtIn else { return }
         let screenFrame = screen.frame
         let baseWidth = isExpanded ? notchWidth + 80 : notchWidth
@@ -416,7 +479,38 @@ class NotchWindow: NSPanel {
             width: baseWidth,
             height: notchHeight
         )
-        setFrame(targetFrame, display: true)
+        
+        let startFrame = frame
+        let startProtrusion = pillView.earProtrusion
+        
+        let startTime = CACurrentMediaTime()
+        let duration: Double = 0.25
+        
+        activeDisplayLink?.stop()
+        let displayLink = CVDisplayLinkWrapper { [weak self] in
+            guard let self else { return false }
+            let elapsed = CACurrentMediaTime() - startTime
+            let t = min(elapsed / duration, 1.0)
+            let ease = Self.easeInOut(t)
+            
+            let protrusion = startProtrusion * (1.0 - ease)
+            
+            let currentX = startFrame.origin.x + (targetFrame.origin.x - startFrame.origin.x) * ease
+            let currentY = startFrame.origin.y + (targetFrame.origin.y - startFrame.origin.y) * ease
+            let currentWidth = startFrame.width + (targetFrame.width - startFrame.width) * ease
+            let currentHeight = startFrame.height + (targetFrame.height - startFrame.height) * ease
+            
+            DispatchQueue.main.async {
+                self.pillView.earProtrusion = protrusion
+                self.setFrame(NSRect(x: currentX, y: currentY, width: currentWidth, height: currentHeight), display: true)
+                if t >= 1.0 {
+                    self.pillView.isHovered = false
+                }
+            }
+            return t < 1.0
+        }
+        activeDisplayLink = displayLink
+        displayLink.start()
     }
 
     // MARK: - Observers
@@ -434,6 +528,11 @@ class NotchWindow: NSPanel {
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    override func mouseDown(with event: NSEvent) {
+        // Trigger reveal on click
+        onHover?()
+    }
 }
 
 // MARK: - NSScreen helper
@@ -497,55 +596,43 @@ class NotchPillView: NSView {
         let h = bounds.height
         guard w > 0, h > 0 else { return }
 
-        let ear = Self.earRadius
         shapeLayer.frame = CGRect(x: 0, y: 0, width: w, height: h)
-
-        // Hide separate ear layer — ears are now integrated into the body path
         earLayer.isHidden = true
 
         let bodyPath = CGMutablePath()
-        if isHovered {
-            let p = earProtrusion  // 0 to earRadius — controls how far the curve extends
+        
+        // Exact MacBook notch radii
+        let topRadius: CGFloat = 8.0    // Concave shoulder radius (where it meets the bezel)
+        let bottomRadius: CGFloat = 0.0 // Flat bottom — sits flush on the panel's sharp top edge
 
-            // Single unified path: body + ear curves at bottom corners.
-            // As earProtrusion goes from 0 → earRadius, the bottom corners
-            // smoothly curve outward, giving the impression the notch is
-            // organically growing the ears.
+        // Start at top-left corner
+        bodyPath.move(to: CGPoint(x: 0, y: h))
 
-            // Bottom-left: concave curve from outer tip up to body edge
-            bodyPath.move(to: CGPoint(x: ear - p, y: 0))
-            bodyPath.addQuadCurve(
-                to: CGPoint(x: ear, y: p),
-                control: CGPoint(x: ear, y: 0)
-            )
-            // Left side up to top
-            bodyPath.addLine(to: CGPoint(x: ear, y: h))
-            // Top edge
-            bodyPath.addLine(to: CGPoint(x: w - ear, y: h))
-            // Right side down to ear
-            bodyPath.addLine(to: CGPoint(x: w - ear, y: p))
-            // Bottom-right: concave curve from body edge out to tip
-            bodyPath.addQuadCurve(
-                to: CGPoint(x: w - ear + p, y: 0),
-                control: CGPoint(x: w - ear, y: 0)
-            )
-            bodyPath.closeSubpath()
-        } else {
-            let cr: CGFloat = 9.5
-            bodyPath.move(to: CGPoint(x: 0, y: h))
-            bodyPath.addLine(to: CGPoint(x: w, y: h))
-            bodyPath.addLine(to: CGPoint(x: w, y: cr))
-            bodyPath.addQuadCurve(
-                to: CGPoint(x: w - cr, y: 0),
-                control: CGPoint(x: w, y: 0)
-            )
-            bodyPath.addLine(to: CGPoint(x: cr, y: 0))
-            bodyPath.addQuadCurve(
-                to: CGPoint(x: 0, y: cr),
-                control: CGPoint(x: 0, y: 0)
-            )
-            bodyPath.closeSubpath()
-        }
+        // Top-left concave curve (Shoulder)
+        bodyPath.addQuadCurve(
+            to: CGPoint(x: topRadius, y: h - topRadius),
+            control: CGPoint(x: topRadius, y: h)
+        )
+
+        // Left vertical edge → bottom-left corner (flat, no radius)
+        bodyPath.addLine(to: CGPoint(x: topRadius, y: 0))
+
+        // Bottom horizontal edge
+        bodyPath.addLine(to: CGPoint(x: w - topRadius, y: 0))
+
+        // Right vertical edge
+        bodyPath.addLine(to: CGPoint(x: w - topRadius, y: h - topRadius))
+
+        // Top-right concave curve (Shoulder)
+        bodyPath.addQuadCurve(
+            to: CGPoint(x: w, y: h),
+            control: CGPoint(x: w - topRadius, y: h)
+        )
+
+        // Close path along the top screen edge
+        bodyPath.addLine(to: CGPoint(x: 0, y: h))
+        bodyPath.closeSubpath()
+        
         shapeLayer.path = bodyPath
     }
 }
@@ -575,65 +662,126 @@ enum NotchDisplayState: Equatable {
     }
 }
 
+// MARK: - Notch pill model (Observable for reliable SwiftUI reactivity)
+
+@Observable
+class NotchPillModel {
+    static let shared = NotchPillModel()
+    var isHovering: Bool = false
+}
+
 // MARK: - Notch pill SwiftUI content
 
 struct NotchPillContent: View {
-    var isHovering: Bool = false
-    private var displayState: NotchDisplayState { .current }
+    // Access all @Observable singletons directly — same pattern as SessionStore.shared/SettingsManager.shared,
+    // ensuring SwiftUI's withObservationTracking registers dependencies during body evaluation.
+    private var pillModel = NotchPillModel.shared
+    private var store = SessionStore.shared
+    private var settings = SettingsManager.shared
+
+    private var displayState: NotchDisplayState {
+        guard settings.claudeIntegrationEnabled else { return .idle }
+        if store.sessions.contains(where: { $0.terminalStatus == .taskCompleted }) { return .taskCompleted }
+        if store.sessions.contains(where: { $0.terminalStatus == .waitingForInput }) { return .waitingForInput }
+        if store.sessions.contains(where: { $0.terminalStatus == .working }) { return .working }
+        return .idle
+    }
 
     var body: some View {
+        let isHovering = pillModel.isHovering
         ZStack {
-            HStack {
+            // Glow layer background
+            if displayState != .idle {
+                Circle()
+                    .fill(glowColor.opacity(0.15))
+                    .frame(width: 80, height: 80)
+                    .blur(radius: 20)
+                    .transition(.opacity)
+            }
 
-                if displayState != .idle {
-
+            HStack(spacing: 12) {
+                // Hover indicator (Left)
+                if isHovering {
+                    Button(action: {
+                        SessionStore.shared.activeTab = .terminal
+                        NotificationCenter.default.post(name: .NotchyExpandPanel, object: nil)
+                    }) {
+                        Image(systemName: "apple.terminal")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    .buttonStyle(.plain)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+                } else if displayState != .idle {
+                    // Bot Face (Left)
                     Rectangle()
                         .foregroundColor(.clear)
                         .frame(width: 18, height: 18)
                         .overlay(alignment: .leading) {
-                            BotFaceView() //state: displayState
+                            BotFaceView(state: displayState)
                                 .frame(width: 20, height: 15)
                                 .mask(RoundedRectangle(cornerRadius: 5))
                         }
-//                        .offset(x: 2)
-//                        .padding(.leading, -2)
+                        .transition(.scale.combined(with: .opacity))
+                }
 
+                Spacer()
 
-                    Spacer()
+                // Status / Settings Icons (Right)
+                HStack(spacing: 12) {
+                    if displayState != .idle {
+                        switch displayState {
+                        case .taskCompleted:
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.green)
+                                .transition(.scale.combined(with: .opacity))
+                        case .waitingForInput:
+                            Image(systemName: "hand.raised.fill")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.yellow)
+                                .transition(.scale.combined(with: .opacity))
+                        case .working:
+                            SpinnerView()
+                                .frame(width: 14, height: 14)
+                                .transition(.scale.combined(with: .opacity))
+                        case .idle:
+                            EmptyView()
+                        }
+                    }
 
-                    switch displayState {
-                    case .taskCompleted:
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.green)
-                            .transition(.scale.combined(with: .opacity))
-                    case .waitingForInput:
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.yellow)
-                            .transition(.scale.combined(with: .opacity))
-                    case .working:
-                        SpinnerView()
-                            .frame(width: 14, height: 14)
-                            .transition(.scale.combined(with: .opacity))
-                    case .idle:
-                        EmptyView()
+                    if isHovering {
+                        Button(action: {
+                            SessionStore.shared.activeTab = .settings
+                            NotificationCenter.default.post(name: .NotchyExpandPanel, object: nil)
+                        }) {
+                            Image(systemName: "gear")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                        .buttonStyle(.plain)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                     }
                 }
             }
-            .animation(.easeInOut(duration: 0.25), value: displayState)
-            .padding(.horizontal, 12 + (isHovering ? NotchPillView.earRadius : 0))
-
-            // Debug: show current displayState
-//            Text("\(String(describing: displayState))")
-//                .font(.system(size: 10, weight: .medium, design: .monospaced))
-//                .foregroundColor(.white)
+            .padding(.horizontal, 16 + (isHovering ? 4 : 0))
+            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: displayState)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovering)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
         .offset(y: isHovering ? -3 : -2)
         .onChange(of: displayState) {
             NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
+        }
+    }
+
+    private var glowColor: Color {
+        switch displayState {
+        case .working: return .blue
+        case .waitingForInput: return .yellow
+        case .taskCompleted: return .green
+        case .idle: return .clear
         }
     }
 }

@@ -206,8 +206,8 @@ class TerminalManager: NSObject, LocalProcessTerminalViewDelegate {
         terminal.processDelegate = self
 
         // Match macOS Terminal default font size
-        terminal.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-        terminal.nativeBackgroundColor = NSColor(white: 0.1, alpha: 1.0)
+        terminal.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        terminal.nativeBackgroundColor = .black
         terminal.nativeForegroundColor = NSColor(white: 0.9, alpha: 1.0)
 
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
@@ -243,8 +243,17 @@ class TerminalManager: NSObject, LocalProcessTerminalViewDelegate {
         guard let dir = directory,
               let terminal = source as? ClickThroughTerminalView,
               let sessionId = terminal.sessionId else { return }
+              
+        // Convert file:// URL to local path if needed
+        let localPath: String
+        if dir.hasPrefix("file://"), let url = URL(string: dir) {
+            localPath = url.path
+        } else {
+            localPath = dir
+        }
+        
         DispatchQueue.main.async {
-            SessionStore.shared.updateWorkingDirectory(sessionId, directory: dir)
+            SessionStore.shared.updateWorkingDirectory(sessionId, directory: localPath)
         }
     }
 
