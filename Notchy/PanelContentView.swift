@@ -51,14 +51,6 @@ struct PanelContentView: View {
                     }
                     .buttonStyle(.plain)
                     .help("New session")
-                    
-                    Button(action: { sessionStore.isPinned.toggle() }) {
-                        Image(systemName: sessionStore.isPinned ? "pin.fill" : "pin")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(sessionStore.isPinned ? .green : .white.opacity(0.7))
-                    }
-                    .buttonStyle(.plain)
-                    .help(sessionStore.isPinned ? "Unpin panel" : "Pin panel")
                 }
             }
             .padding(.horizontal, 16)
@@ -95,7 +87,6 @@ struct PanelContentView: View {
     
     private var terminalContentView: some View {
         VStack(spacing: 0) {
-            if sessionStore.isTerminalExpanded {
                 if let session = sessionStore.activeSession {
                     if session.hasStarted {
                         TerminalSessionView(
@@ -113,7 +104,6 @@ struct PanelContentView: View {
                 } else {
                     placeholderView("No active sessions")
                 }
-            }
         }
     }
     
@@ -145,14 +135,14 @@ struct PanelContentView: View {
                         Image(nsImage: NSApp.applicationIconImage)
                             .resizable()
                             .frame(width: 48, height: 48)
-                        Text("Notchy")
+                        Text("Safran Notch")
                             .font(.title3.bold())
                             .foregroundColor(.white)
-                        Text("by Adam Lyttle")
+                        Text("by Berk Safran")
                             .font(.system(size: 14))
                             .foregroundColor(.white.opacity(0.6))
-                        Button("github.com/adamlyttleapps") {
-                            if let url = URL(string: "https://github.com/adamlyttleapps") {
+                        Button("github.com/berksafran") {
+                            if let url = URL(string: "https://github.com/berksafran") {
                                 NSWorkspace.shared.open(url)
                             }
                         }

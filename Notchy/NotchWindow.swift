@@ -713,7 +713,7 @@ struct NotchPillContent: View {
             }
 
             HStack(spacing: 0) {
-                // MARK: - Left Side (Terminal, Settings, Pin, Quit)
+                // MARK: - Left Side (Terminal, Settings)
                 if isHovering {
                     HStack(spacing: 14) {
                         // Terminal Icon
@@ -737,31 +737,15 @@ struct NotchPillContent: View {
                                 .foregroundColor(store.activeTab == .settings ? .accentColor : .white)
                         }
                         .buttonStyle(.plain)
-
-                        // Pin Icon
-                        Button(action: { store.isPinned.toggle() }) {
-                            Image(systemName: store.isPinned ? "pin.fill" : "pin")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                        .buttonStyle(.plain)
-
-                        // Quit Icon
-                        Button(action: { NSApp.terminate(nil) }) {
-                            Image(systemName: "power")
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                        .buttonStyle(.plain)
                     }
                     .transition(.move(edge: .leading).combined(with: .opacity))
                 }
 
                 Spacer()
 
-                // MARK: - Right Side (Status & Bot Face)
+                // MARK: - Right Side (Status, Bot Face, Pin, Quit)
                 HStack(spacing: 14) {
-                    if !isHovering && displayState != .idle {
+                    if displayState != .idle {
                         // Indicators (Status)
                         switch displayState {
                         case .taskCompleted:
@@ -788,9 +772,27 @@ struct NotchPillContent: View {
                                     .mask(RoundedRectangle(cornerRadius: 5))
                             }
                     } else if !isHovering && displayState == .idle {
-                        Image(systemName: "cpu")
-                            .font(.system(size: 14, weight: .bold))
+                        Image(systemName: "eyes")
+                            .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.orange)
+                    }
+
+                    if isHovering {
+                        // Pin Icon
+                        Button(action: { store.isPinned.toggle() }) {
+                            Image(systemName: store.isPinned ? "pin.fill" : "pin")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        .buttonStyle(.plain)
+
+                        // Quit Icon
+                        Button(action: { NSApp.terminate(nil) }) {
+                            Image(systemName: "power")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .transition(.scale.combined(with: .opacity))
