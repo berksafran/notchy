@@ -116,7 +116,7 @@ class TerminalPanel: NSPanel {
                 makeKeyAndOrderFront(nil)
                 
                 NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.3
+                    context.duration = 0.35
                     context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                     animator().alphaValue = 1.0
                     animator().setFrame(NSRect(x: x, y: finalY, width: panelWidth, height: panelHeight), display: true)
@@ -160,7 +160,7 @@ class TerminalPanel: NSPanel {
             makeKeyAndOrderFront(nil)
             
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.3
+                context.duration = 0.35
                 context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 animator().alphaValue = 1.0
                 animator().setFrame(NSRect(x: x, y: finalY, width: panelWidth, height: panelHeight), display: true)

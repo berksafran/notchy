@@ -230,10 +230,12 @@ class NotchWindow: NSPanel {
     private func collapse() {
         isExpanded = false
 
-        // Fade out the status content but keep the pill visible
+        // Fade out the status content only if not currently hovered
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.15
-            self.pillContentHost?.animator().alphaValue = 0
+            if !self.isHovered {
+                self.pillContentHost?.animator().alphaValue = 0
+            }
         }
 
         guard let screen = NSScreen.builtIn else { return }
@@ -707,8 +709,8 @@ struct NotchPillContent: View {
                         NotificationCenter.default.post(name: .NotchyExpandPanel, object: nil)
                     }) {
                         Image(systemName: "apple.terminal")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.white.opacity(0.7))
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
                     }
                     .buttonStyle(.plain)
                     .transition(.move(edge: .leading).combined(with: .opacity))
@@ -737,12 +739,11 @@ struct NotchPillContent: View {
                                 .foregroundColor(.green)
                                 .transition(.scale.combined(with: .opacity))
                         case .waitingForInput:
-                            Image(systemName: "hand.raised.fill")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.yellow)
+                            ReadyIndicatorView()
+                                .frame(width: 14, height: 14)
                                 .transition(.scale.combined(with: .opacity))
                         case .working:
-                            SpinnerView()
+                            WorkingIndicatorView()
                                 .frame(width: 14, height: 14)
                                 .transition(.scale.combined(with: .opacity))
                         case .idle:
@@ -756,8 +757,8 @@ struct NotchPillContent: View {
                             NotificationCenter.default.post(name: .NotchyExpandPanel, object: nil)
                         }) {
                             Image(systemName: "gear")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundColor(.white.opacity(0.7))
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.white)
                         }
                         .buttonStyle(.plain)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -778,23 +779,31 @@ struct NotchPillContent: View {
 
     private var glowColor: Color {
         switch displayState {
-        case .working: return .blue
-        case .waitingForInput: return .yellow
+        case .working: return .yellow
+        case .waitingForInput: return .green
         case .taskCompleted: return .green
         case .idle: return .clear
         }
     }
 }
 
-struct SpinnerView: View {
+struct ReadyIndicatorView: View {
+    var body: some View {
+        Circle()
+            .fill(Color.green)
+            .frame(width: 10, height: 10)
+    }
+}
+
+struct WorkingIndicatorView: View {
     @State private var isAnimating = false
 
     var body: some View {
         Circle()
-            .trim(from: 0.05, to: 0.8)
-            .stroke(Color.white, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-            .rotationEffect(.degrees(isAnimating ? 360 : 0))
-            .animation(.linear(duration: 0.8).repeatForever(autoreverses: false), value: isAnimating)
+            .fill(Color.yellow)
+            .frame(width: 10, height: 10)
+            .opacity(isAnimating ? 0.3 : 1.0)
+            .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isAnimating)
             .onAppear { isAnimating = true }
     }
 }

@@ -261,8 +261,8 @@ struct NotchBar: View {
                     SessionStore.shared.activeTab = .terminal
                 }) {
                     Image(systemName: "apple.terminal")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white.opacity(0.7))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
                 }
                 .buttonStyle(.plain)
                 .padding(.leading, 16)
@@ -273,8 +273,8 @@ struct NotchBar: View {
                     SessionStore.shared.activeTab = .settings
                 }) {
                     Image(systemName: "gear")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white.opacity(0.7))
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, 16)
