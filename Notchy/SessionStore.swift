@@ -7,6 +7,7 @@ extension Notification.Name {
     static let NotchyExpandPanel = Notification.Name("NotchyExpandPanel")
     static let NotchyNotchStatusChanged = Notification.Name("NotchyNotchStatusChanged")
     static let NotchyLayoutStyleChanged = Notification.Name("NotchyLayoutStyleChanged")
+    static let NotchyToggleExpand = Notification.Name("NotchyToggleExpand")
 }
 
 @Observable
@@ -271,7 +272,7 @@ class SessionStore {
                 playSound(named: "waitingForInput")
                 if isPinned && !isTerminalExpanded && id == activeSessionId {
                     isTerminalExpanded = true
-                    NotificationCenter.default.post(name: .NotchyExpandPanel, object: nil)
+                    NotificationCenter.default.post(name: .NotchyToggleExpand, object: nil)
                 }
             }
             else if status == .taskCompleted && previous != .taskCompleted {

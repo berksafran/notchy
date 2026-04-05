@@ -96,7 +96,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.panel.isVisible ?? false
         }
         notchWindow?.panelWidth = { [weak self] in
-            self?.panel.frame.width ?? 864
+            (self?.panel.frame.width ?? 864) + 16
         }
     }
 

@@ -846,3 +846,9 @@ class CVDisplayLinkWrapper {
         self.displayLink = nil
     }
 }
+
+#Preview("Notch İçeriği") {
+    NotchPillContent()
+        .frame(width: 180, height: 37)
+        .background(Color.black)
+}

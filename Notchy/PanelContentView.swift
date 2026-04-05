@@ -395,3 +395,22 @@ struct VisualEffectView: NSViewRepresentable {
         nsView.blendingMode = blendingMode
     }
 }
+
+#Preview("Panel & NotchBar") {
+    VStack(spacing: 30) {
+        VStack {
+            Text("Notch Bar").foregroundColor(.secondary)
+            NotchBar().frame(width: 450)
+        }
+        
+        VStack {
+            PanelContentView(
+                sessionStore: SessionStore.shared,
+                onClose: {}
+            )
+            .frame(width: 450, height: 600)
+        }
+    }
+    .padding()
+    .background(Color(NSColor.windowBackgroundColor))
+}

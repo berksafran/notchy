@@ -1,0 +1,12 @@
+.DS_Store
+.git
+.gitignore
+Build
+CLAUDE.md
+LICENSE
+NOTCH_DESIGN.md
+Notchy
+Notchy.xcodeproj
+README.md
+TODO.md
+filelist.txt

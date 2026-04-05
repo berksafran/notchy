@@ -65,6 +65,13 @@ class TerminalPanel: NSPanel {
             name: .NotchyExpandPanel,
             object: nil
         )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleToggleExpandNotification),
+            name: .NotchyToggleExpand,
+            object: nil
+        )
     }
 
     private func getNotchHeight(for screen: NSScreen) -> CGFloat {
@@ -91,15 +98,28 @@ class TerminalPanel: NSPanel {
                 : screen.frame.maxY - notchHeight - panelHeight + 8
 
             if !isVisible {
+                let notchHeight = getNotchHeight(for: screen)
+                // Fiziksel notch varsa onun genişliğini al, yoksa standart 180 kullan
+                var nw: CGFloat = 180
+                if #available(macOS 12.0, *), 
+                   let left = screen.auxiliaryTopLeftArea, 
+                   let right = screen.auxiliaryTopRightArea {
+                    nw = right.minX - left.maxX
+                }
+
+                // Notch genişliğinden başlayarak yana doğru açılma (expand) animasyonu
+                let startWidth = isExpanded ? (panelWidth / 3) : nw
+                let startX = rect.midX - startWidth / 2
+                
                 alphaValue = 0.0
-                setFrameOrigin(NSPoint(x: x, y: finalY + 20))
+                setFrame(NSRect(x: startX, y: finalY, width: startWidth, height: panelHeight), display: true)
                 makeKeyAndOrderFront(nil)
                 
                 NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.25
-                    context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                    context.duration = 0.3
+                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                     animator().alphaValue = 1.0
-                    animator().setFrameOrigin(NSPoint(x: x, y: finalY))
+                    animator().setFrame(NSRect(x: x, y: finalY, width: panelWidth, height: panelHeight), display: true)
                 }
             } else {
                 setFrameOrigin(NSPoint(x: x, y: finalY))
@@ -122,15 +142,28 @@ class TerminalPanel: NSPanel {
             : screenFrame.maxY - notchHeight - panelHeight + 8
 
         if !isVisible {
+            let notchHeight = getNotchHeight(for: screen)
+            // Fiziksel notch varsa onun genişliğini al, yoksa standart 180 kullan
+            var nw: CGFloat = 180
+            if #available(macOS 12.0, *), 
+               let left = screen.auxiliaryTopLeftArea, 
+               let right = screen.auxiliaryTopRightArea {
+                nw = right.minX - left.maxX
+            }
+
+            // Notch genişliğinden başlayarak yana doğru açılma (expand) animasyonu
+            let startWidth = isExpanded ? (panelWidth / 3) : nw
+            let startX = screenFrame.midX - startWidth / 2
+            
             alphaValue = 0.0
-            setFrameOrigin(NSPoint(x: x, y: finalY + 20))
+            setFrame(NSRect(x: startX, y: finalY, width: startWidth, height: panelHeight), display: true)
             makeKeyAndOrderFront(nil)
             
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.25
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                context.duration = 0.3
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 animator().alphaValue = 1.0
-                animator().setFrameOrigin(NSPoint(x: x, y: finalY))
+                animator().setFrame(NSRect(x: x, y: finalY, width: panelWidth, height: panelHeight), display: true)
             }
         } else {
             setFrameOrigin(NSPoint(x: x, y: finalY))
@@ -183,6 +216,14 @@ class TerminalPanel: NSPanel {
 
     @objc private func handleExpandPanel() {
         handleToggleExpand()
+    }
+
+    @objc private func handleToggleExpandNotification() {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.35
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            handleToggleExpand()
+        }
     }
 
     @objc private func windowDidBecomeKey(_ notification: Notification) {
