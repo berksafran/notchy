@@ -33,7 +33,7 @@ struct SettingsContentView: View {
                 .tabItem { Label(SettingsTab.integrations.rawValue, systemImage: SettingsTab.integrations.icon) }
                 .tag(SettingsTab.integrations)
         }
-        .frame(width: 450, height: 240)
+        .frame(width: 450, height: 280)
     }
 }
 
@@ -65,16 +65,20 @@ struct IntegrationsTab: View {
     var body: some View {
         Form {
             Toggle(isOn: $settings.xcodeIntegrationEnabled) {
-                Text("Xcode")
-                Text("Detect Xcode projects automatically")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Xcode")
+                    Text("Detect Xcode projects automatically")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
+                }
             }
             Toggle(isOn: $settings.claudeIntegrationEnabled) {
-                Text("Claude")
-                Text("Shows real-time status updates")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Claude")
+                    Text("Shows real-time status updates")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
+                }
             }
         }
         .toggleStyle(.switch)
@@ -126,7 +130,7 @@ class SettingsWindowController {
         let hostingView = NSHostingView(rootView: content)
 
         let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 450, height: 240),
+            contentRect: NSRect(x: 0, y: 0, width: 450, height: 280),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false

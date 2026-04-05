@@ -6,7 +6,7 @@ extension Notification.Name {
     static let NotchyHidePanel = Notification.Name("NotchyHidePanel")
     static let NotchyExpandPanel = Notification.Name("NotchyExpandPanel")
     static let NotchyNotchStatusChanged = Notification.Name("NotchyNotchStatusChanged")
-    static let NotchyLayoutStyleChanged = Notification.Name("NotchyLayoutStyleChanged")
+    static let NotchySettingsChanged = Notification.Name("NotchySettingsChanged")
     static let NotchyToggleExpand = Notification.Name("NotchyToggleExpand")
 }
 

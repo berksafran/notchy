@@ -90,12 +90,7 @@ class TerminalPanel: NSPanel {
             let x = rect.midX - panelWidth / 2
 
             let notchHeight = getNotchHeight(for: screen)
-            let isExpanded = SettingsManager.shared.layoutStyle == .expanded
-            // Expanded: panel covers the notch area (top of panel = top of screen).
-            // Classic: panel sits just below the notch with 8pt overlap to bridge the hover gap.
-            let finalY = isExpanded
-                ? screen.frame.maxY - panelHeight
-                : screen.frame.maxY - notchHeight - panelHeight + 8
+            let finalY = screen.frame.maxY - notchHeight - panelHeight + 8
 
             if !isVisible {
                 let notchHeight = getNotchHeight(for: screen)
@@ -108,7 +103,7 @@ class TerminalPanel: NSPanel {
                 }
 
                 // Notch genişliğinden başlayarak yana doğru açılma (expand) animasyonu
-                let startWidth = isExpanded ? (panelWidth / 3) : nw
+                let startWidth = nw
                 let startX = rect.midX - startWidth / 2
                 
                 alphaValue = 0.0
@@ -136,10 +131,7 @@ class TerminalPanel: NSPanel {
         let x = screenFrame.midX - panelWidth / 2
 
         let notchHeight = getNotchHeight(for: screen)
-        let isExpanded = SettingsManager.shared.layoutStyle == .expanded
-        let finalY = isExpanded
-            ? screenFrame.maxY - panelHeight
-            : screenFrame.maxY - notchHeight - panelHeight + 8
+        let finalY = screenFrame.maxY - notchHeight - panelHeight + 8
 
         if !isVisible {
             let notchHeight = getNotchHeight(for: screen)
@@ -152,7 +144,7 @@ class TerminalPanel: NSPanel {
             }
 
             // Notch genişliğinden başlayarak yana doğru açılma (expand) animasyonu
-            let startWidth = isExpanded ? (panelWidth / 3) : nw
+            let startWidth = nw
             let startX = screenFrame.midX - startWidth / 2
             
             alphaValue = 0.0

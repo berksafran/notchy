@@ -22,7 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             setupNotchWindow()
         }
         setupHotkey()
-        observeLayoutStyleChanges()
+        observeNotchStatusChanges()
         // Detect in background so launch isn't blocked
         sessionStore.detectAllXcodeProjectsAsync()
     }
@@ -69,23 +69,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func observeLayoutStyleChanges() {
-        NotificationCenter.default.addObserver(
-            forName: .NotchyLayoutStyleChanged,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            self?.applyLayoutStyle()
+    private func observeNotchStatusChanges() {
+        NotificationCenter.default.addObserver(forName: .NotchySettingsChanged, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            if self.settings.showNotch {
+                if self.notchWindow == nil {
+                    self.setupNotchWindow()
+                }
+            } else {
+                self.notchWindow?.close()
+                self.notchWindow = nil
+            }
         }
-    }
-
-    private func applyLayoutStyle() {
-        // Both classic and expanded use the NotchWindow (Hap)
-        if settings.showNotch && notchWindow == nil {
-            setupNotchWindow()
-        }
-        // Re-position the Hap for the new layout style
-        notchWindow?.layoutDidChange()
     }
 
     private func setupNotchWindow() {
@@ -278,15 +273,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
-        SettingsWindowController.shared.show { [weak self] showNotch in
-            guard let self else { return }
-            if showNotch {
-                if self.notchWindow == nil { self.setupNotchWindow() }
-            } else {
-                self.notchWindow?.orderOut(nil)
-                self.notchWindow = nil
-            }
-        }
+        sessionStore.activeTab = .settings
+        showPanelBelowStatusItem()
+        NotificationCenter.default.post(name: .NotchyExpandPanel, object: nil)
     }
 
     @objc private func createNewSession() {

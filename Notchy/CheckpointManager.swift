@@ -75,7 +75,7 @@ class CheckpointManager {
 
         // Use a temporary index file to avoid disturbing the user's staged changes
         let tempIndex = NSTemporaryDirectory() + "Notchy-index-\(UUID().uuidString)"
-        defer { try? FileManager.default.removeItem(atPath: tempIndex) }
+        defer { _ = try? FileManager.default.removeItem(atPath: tempIndex) }
 
         let env = ["GIT_INDEX_FILE": tempIndex]
 
@@ -127,7 +127,7 @@ class CheckpointManager {
     func clearCheckpoints(for projectName: String, in projectDirectory: String) {
         let list = checkpoints(for: projectName, in: projectDirectory)
         for checkpoint in list {
-            try? git(["update-ref", "-d", checkpoint.id], in: projectDirectory)
+            _ = try? git(["update-ref", "-d", checkpoint.id], in: projectDirectory)
         }
     }
 }

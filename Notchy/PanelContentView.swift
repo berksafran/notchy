@@ -13,9 +13,7 @@ struct PanelContentView: View {
     @State private var activeTab: PanelTab = .terminal
     @State private var showRestoreConfirmation = false
     @Bindable private var settings = SettingsManager.shared
-
-    private var isUnified: Bool { false } // Unified layout removed; classic and expanded both use ClassicPanelShape
-
+    
     var body: some View {
         ZStack {
             if sessionStore.activeTab == .terminal {
@@ -25,26 +23,15 @@ struct PanelContentView: View {
             }
         }
         .background(VisualEffectView(material: .hudWindow, blendingMode: .behindWindow))
-        .clipShape(isUnified ? AnyShape(UnifiedPanelShape(cornerRadius: 20)) : AnyShape(ClassicPanelShape(cornerRadius: 20)))
+        .clipShape(ClassicPanelShape(cornerRadius: 20))
         .overlay(
-            Group {
-                if isUnified {
-                    UnifiedPanelShape(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                } else {
-                    ClassicPanelShape(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                }
-            }
+            ClassicPanelShape(cornerRadius: 20)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
         )
     }
 
     private var terminalLayout: some View {
         VStack(spacing: 0) {
-            // MARK: - Notch Bar (Unified layout only)
-            if isUnified {
-                NotchBar()
-            }
 
             // MARK: - Header (Modern Tab Bar)
             HStack(spacing: 20) {
@@ -96,9 +83,6 @@ struct PanelContentView: View {
 
     private var settingsLayout: some View {
         VStack(spacing: 0) {
-            if isUnified {
-                NotchBar()
-            }
             ZStack {
                 Color.black
                 settingsContentView
@@ -143,15 +127,41 @@ struct PanelContentView: View {
                     .padding(.bottom, 10)
                 
                 SettingsSection(title: "General") {
-                    SettingLayoutRow(layoutStyle: $settings.layoutStyle)
                     SettingToggleRow(title: "Show notch overlay", description: "Display the Hap overlay above the terminal panel.", isOn: $settings.showNotch)
+                        .onChange(of: settings.showNotch) {
+                            NotificationCenter.default.post(name: .NotchySettingsChanged, object: nil)
+                        }
                     SettingToggleRow(title: "Reveal panel on hover", description: "Automatically open the terminal panel when hovering over the notch.", isOn: $settings.revealOnHover)
                     SettingToggleRow(title: "Enable sounds", description: "Play subtle sound effects for Claude task completion.", isOn: $settings.soundsEnabled)
                 }
                 
                 SettingsSection(title: "Integrations") {
                     SettingToggleRow(title: "Xcode detection", description: "Automatically detect active Xcode projects and open sessions.", isOn: $settings.xcodeIntegrationEnabled)
-                    SettingToggleRow(title: "Claude status updates", description: "Show visual indicators when Claude is working or waiting.", isOn: $settings.claudeIntegrationEnabled)
+                    SettingToggleRow(title: "Claude status updates", description: "Shows real-time status updates.", isOn: $settings.claudeIntegrationEnabled)
+                }
+
+                SettingsSection(title: "About") {
+                    VStack(spacing: 12) {
+                        Image(nsImage: NSApp.applicationIconImage)
+                            .resizable()
+                            .frame(width: 48, height: 48)
+                        Text("Notchy")
+                            .font(.title3.bold())
+                            .foregroundColor(.white)
+                        Text("by Adam Lyttle")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.6))
+                        Button("github.com/adamlyttleapps") {
+                            if let url = URL(string: "https://github.com/adamlyttleapps") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 13))
+                        .foregroundColor(.blue)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
                 }
             }
             .padding(32)
@@ -169,31 +179,6 @@ struct PanelContentView: View {
 
 // MARK: - Helper Views
 
-struct SettingLayoutRow: View {
-    @Binding var layoutStyle: LayoutStyle
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Panel layout")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.white)
-                Text("Classic: small Hap. Expanded: Hap always matches panel width.")
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Picker("", selection: $layoutStyle) {
-                Text("Classic").tag(LayoutStyle.classic)
-                Text("Expanded").tag(LayoutStyle.expanded)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 160)
-        }
-        .padding(.vertical, 4)
-    }
-}
 
 struct SettingToggleRow: View {
     let title: String
@@ -208,7 +193,7 @@ struct SettingToggleRow: View {
                     .foregroundColor(.white)
                 Text(description)
                     .font(.system(size: 13))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.white.opacity(0.7))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

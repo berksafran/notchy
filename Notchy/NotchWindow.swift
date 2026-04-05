@@ -181,7 +181,7 @@ class NotchWindow: NSPanel {
         guard let screen = NSScreen.builtIn else { return }
         let screenFrame = screen.frame
 
-        let targetWidth: CGFloat = notchWidth + 80
+        let targetWidth: CGFloat = panelWidth?() ?? notchWidth + 160
         var targetFrame = NSRect(
             x: screenFrame.midX - targetWidth / 2,
             y: screenFrame.maxY - notchHeight,
@@ -316,15 +316,19 @@ class NotchWindow: NSPanel {
     private func positionAtNotch() {
         guard let screen = NSScreen.builtIn else { return }
         let screenFrame = screen.frame
-        let baseWidth = isExpandedLayout ? (panelWidth?() ?? notchWidth) : notchWidth
+        let baseWidth: CGFloat
+        if isHovered {
+            baseWidth = panelWidth?() ?? notchWidth + 160
+        } else if isExpanded {
+            baseWidth = panelWidth?() ?? notchWidth + 80
+        } else {
+            baseWidth = notchWidth * 1.5
+        }
         let x = screenFrame.midX - baseWidth / 2
         let y = screenFrame.maxY - notchHeight
         setFrame(NSRect(x: x, y: y, width: baseWidth, height: notchHeight), display: true)
     }
 
-    private var isExpandedLayout: Bool {
-        SettingsManager.shared.layoutStyle == .expanded
-    }
 
     // MARK: - Mouse tracking
 
@@ -348,14 +352,12 @@ class NotchWindow: NSPanel {
         let screenFrame = screen.frame
         
         let currentWidth: CGFloat
-        if isExpandedLayout {
-            currentWidth = panelWidth?() ?? notchWidth
-        } else if isHovered {
+        if isHovered {
             currentWidth = panelWidth?() ?? notchWidth + 160
         } else if isExpanded {
-            currentWidth = notchWidth + 80
+            currentWidth = panelWidth?() ?? notchWidth + 80
         } else {
-            currentWidth = notchWidth
+            currentWidth = notchWidth * 1.5
         }
         let currentHeight = isHovered ? notchHeight + Self.hoverGrowY : notchHeight
         
@@ -392,7 +394,7 @@ class NotchWindow: NSPanel {
         }
     }
 
-    /// Called when the layout style changes — re-positions the Hap for the new style.
+    /// Re-positions the Hap.
     func layoutDidChange() {
         isHovered = false
         positionAtNotch()
@@ -425,11 +427,6 @@ class NotchWindow: NSPanel {
     }
 
     private func hoverGrow() {
-        if isExpandedLayout {
-            // In expanded layout the Hap is always at panel width — no grow animation needed
-            NotchPillModel.shared.isHovering = true
-            return
-        }
         pillView.isHovered = true
         NotchPillModel.shared.isHovering = true
         
@@ -468,13 +465,10 @@ class NotchWindow: NSPanel {
 
     private func hoverShrink() {
         NotchPillModel.shared.isHovering = false
-        if isExpandedLayout {
-            // In expanded layout the Hap stays at panel width — no shrink
-            return
-        }
+        pillView.isHovered = false
         guard let screen = NSScreen.builtIn else { return }
         let screenFrame = screen.frame
-        let baseWidth = isExpanded ? notchWidth + 80 : notchWidth
+        let baseWidth = isExpanded ? (panelWidth?() ?? notchWidth + 80) : notchWidth * 1.5
         let targetFrame = NSRect(
             x: screenFrame.midX - baseWidth / 2,
             y: screenFrame.maxY - notchHeight,
@@ -551,15 +545,12 @@ extension NSScreen {
 
 // MARK: - Notch pill background view
 
-/// A view that draws a rounded pill shape extending below the notch.
-/// When hovered, curved protrusions ("ears") appear at the bottom-left and bottom-right,
-/// creating a smooth concave transition out from the notch body.
 class NotchPillView: NSView {
     var isHovered: Bool = false {
         didSet {
-            guard isHovered != oldValue else { return }
-            needsDisplay = true
-            needsLayout = true
+            if oldValue != isHovered {
+                updateShape()
+            }
         }
     }
 
@@ -605,7 +596,7 @@ class NotchPillView: NSView {
         
         // Exact MacBook notch radii
         let topRadius: CGFloat = 8.0    // Concave shoulder radius (where it meets the bezel)
-        let bottomRadius: CGFloat = 0.0 // Flat bottom — sits flush on the panel's sharp top edge
+        let bottomRadius: CGFloat = isHovered ? 0.0 : 14.0
 
         // Start at top-left corner
         bodyPath.move(to: CGPoint(x: 0, y: h))
@@ -616,11 +607,31 @@ class NotchPillView: NSView {
             control: CGPoint(x: topRadius, y: h)
         )
 
-        // Left vertical edge → bottom-left corner (flat, no radius)
-        bodyPath.addLine(to: CGPoint(x: topRadius, y: 0))
+        // Left vertical edge to bottom-left corner
+        bodyPath.addLine(to: CGPoint(x: topRadius, y: bottomRadius))
+
+        if bottomRadius > 0 {
+            // Bottom-left corner (Convex)
+            bodyPath.addQuadCurve(
+                to: CGPoint(x: topRadius + bottomRadius, y: 0),
+                control: CGPoint(x: topRadius, y: 0)
+            )
+        } else {
+            bodyPath.addLine(to: CGPoint(x: topRadius, y: 0))
+        }
 
         // Bottom horizontal edge
-        bodyPath.addLine(to: CGPoint(x: w - topRadius, y: 0))
+        bodyPath.addLine(to: CGPoint(x: w - topRadius - bottomRadius, y: 0))
+
+        if bottomRadius > 0 {
+            // Bottom-right corner (Convex)
+            bodyPath.addQuadCurve(
+                to: CGPoint(x: w - topRadius, y: bottomRadius),
+                control: CGPoint(x: w - topRadius, y: 0)
+            )
+        } else {
+            bodyPath.addLine(to: CGPoint(x: w - topRadius, y: 0))
+        }
 
         // Right vertical edge
         bodyPath.addLine(to: CGPoint(x: w - topRadius, y: h - topRadius))
@@ -762,6 +773,11 @@ struct NotchPillContent: View {
                         }
                         .buttonStyle(.plain)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
+                    } else if displayState == .idle {
+                        Image(systemName: "cpu")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.orange)
+                            .transition(.scale.combined(with: .opacity))
                     }
                 }
             }
