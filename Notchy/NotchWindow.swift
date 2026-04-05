@@ -712,74 +712,88 @@ struct NotchPillContent: View {
                     .transition(.opacity)
             }
 
-            HStack(spacing: 12) {
-                // Hover indicator (Left)
+            HStack(spacing: 0) {
+                // MARK: - Left Side (Terminal, Settings, Pin, Quit)
                 if isHovering {
-                    Button(action: {
-                        SessionStore.shared.activeTab = .terminal
-                        NotificationCenter.default.post(name: .NotchyExpandPanel, object: nil)
-                    }) {
-                        Image(systemName: "apple.terminal")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                    .buttonStyle(.plain)
-                    .transition(.move(edge: .leading).combined(with: .opacity))
-                } else if displayState != .idle {
-                    // Bot Face (Left)
-                    Rectangle()
-                        .foregroundColor(.clear)
-                        .frame(width: 18, height: 18)
-                        .overlay(alignment: .leading) {
-                            BotFaceView(state: displayState)
-                                .frame(width: 20, height: 15)
-                                .mask(RoundedRectangle(cornerRadius: 5))
+                    HStack(spacing: 14) {
+                        // Terminal Icon
+                        Button(action: {
+                            store.activeTab = .terminal
+                            NotificationCenter.default.post(name: .NotchyExpandPanel, object: nil)
+                        }) {
+                            Image(systemName: "apple.terminal")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(store.activeTab == .terminal ? .accentColor : .white)
                         }
-                        .transition(.scale.combined(with: .opacity))
+                        .buttonStyle(.plain)
+
+                        // Settings Icon
+                        Button(action: {
+                            store.activeTab = .settings
+                            NotificationCenter.default.post(name: .NotchyExpandPanel, object: nil)
+                        }) {
+                            Image(systemName: "gear")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(store.activeTab == .settings ? .accentColor : .white)
+                        }
+                        .buttonStyle(.plain)
+
+                        // Pin Icon
+                        Button(action: { store.isPinned.toggle() }) {
+                            Image(systemName: store.isPinned ? "pin.fill" : "pin")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        .buttonStyle(.plain)
+
+                        // Quit Icon
+                        Button(action: { NSApp.terminate(nil) }) {
+                            Image(systemName: "power")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .transition(.move(edge: .leading).combined(with: .opacity))
                 }
 
                 Spacer()
 
-                // Status / Settings Icons (Right)
-                HStack(spacing: 12) {
-                    if displayState != .idle {
+                // MARK: - Right Side (Status & Bot Face)
+                HStack(spacing: 14) {
+                    if !isHovering && displayState != .idle {
+                        // Indicators (Status)
                         switch displayState {
                         case .taskCompleted:
                             Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.green)
-                                .transition(.scale.combined(with: .opacity))
                         case .waitingForInput:
                             ReadyIndicatorView()
                                 .frame(width: 14, height: 14)
-                                .transition(.scale.combined(with: .opacity))
                         case .working:
                             WorkingIndicatorView()
                                 .frame(width: 14, height: 14)
-                                .transition(.scale.combined(with: .opacity))
                         case .idle:
                             EmptyView()
                         }
-                    }
-
-                    if isHovering {
-                        Button(action: {
-                            SessionStore.shared.activeTab = .settings
-                            NotificationCenter.default.post(name: .NotchyExpandPanel, object: nil)
-                        }) {
-                            Image(systemName: "gear")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.white)
-                        }
-                        .buttonStyle(.plain)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                    } else if displayState == .idle {
+                        
+                        // Bot Face (Moved to far right)
+                        Rectangle()
+                            .foregroundColor(.clear)
+                            .frame(width: 18, height: 18)
+                            .overlay(alignment: .trailing) {
+                                BotFaceView(state: displayState)
+                                    .frame(width: 20, height: 15)
+                                    .mask(RoundedRectangle(cornerRadius: 5))
+                            }
+                    } else if !isHovering && displayState == .idle {
                         Image(systemName: "cpu")
                             .font(.system(size: 14, weight: .bold))
                             .foregroundColor(.orange)
-                            .transition(.scale.combined(with: .opacity))
                     }
                 }
+                .transition(.scale.combined(with: .opacity))
             }
             .padding(.horizontal, 16 + (isHovering ? 4 : 0))
             .animation(.spring(response: 0.4, dampingFraction: 0.7), value: displayState)
