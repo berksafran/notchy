@@ -772,9 +772,14 @@ struct NotchPillContent: View {
                                     .mask(RoundedRectangle(cornerRadius: 5))
                             }
                     } else if !isHovering && displayState == .idle {
-                        Image(systemName: "eyes")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundColor(.orange)
+                        Rectangle()
+                            .foregroundColor(.clear)
+                            .frame(width: 18, height: 18)
+                            .overlay(alignment: .trailing) {
+                                BotFaceView(state: .taskCompleted)
+                                    .frame(width: 20, height: 15)
+                                    .mask(RoundedRectangle(cornerRadius: 5))
+                            }
                     }
 
                     if isHovering {
