@@ -44,7 +44,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupPanel() {
         panel = TerminalPanel(sessionStore: sessionStore)
-        // When the panel hides for any reason, clean up hover tracking
+
+        // Panel hides: clean up hover tracking so notch shrinks back.
         NotificationCenter.default.addObserver(
             forName: NSWindow.didResignKeyNotification,
             object: panel,
@@ -55,8 +56,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self.panelOpenedViaHover = false
             self.stopHoverTracking()
         }
-        // When panel becomes key (user clicked on it), stop hover tracking
-        // since resign-key will handle hiding from here
+
+        // Panel becomes key (user clicked it, or dialog was dismissed).
+        // Stop hover-to-hide tracking; resign-key will handle hiding from here.
+        // NOTE: We intentionally do NOT call endHover() here because if a system
+        // permission dialog was dismissed, the panel is still hovered and the notch
+        // pill should remain visible. NotchWindow.checkMouse() handles any shrink
+        // needed when the mouse actually leaves the notch area.
         NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
             object: panel,
@@ -66,9 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if self.panelOpenedViaHover {
                 self.panelOpenedViaHover = false
                 self.stopHoverTracking()
-                // Panel is now in "click mode" — shrink the notch hover state
-                // since hover tracking is no longer managing it
-                self.notchWindow?.endHover()
+                // Do NOT call endHover() — let checkMouse() decide naturally.
             }
         }
     }
@@ -118,6 +122,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         startHoverTracking()
         sessionStore.detectAndSwitchAsync()
     }
+
 
     // MARK: - Hover-to-hide tracking
 

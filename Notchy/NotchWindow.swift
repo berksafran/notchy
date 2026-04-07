@@ -175,6 +175,18 @@ class NotchWindow: NSPanel {
         hoverShrink()
     }
 
+    /// Forces the notch into hovered (or un-hovered) state without waiting for a mouse event.
+    /// Used to re-sync appearance after system dialogs that steal key focus.
+    func forceHoverState(_ hovered: Bool) {
+        guard hovered != isHovered else { return }
+        isHovered = hovered
+        if hovered {
+            hoverGrow()
+        } else {
+            hoverShrink()
+        }
+    }
+
     // MARK: - Expand / Collapse
 
     private func observeStatusChanges() {

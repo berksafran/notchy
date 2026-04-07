@@ -58,12 +58,8 @@ struct NotchPillContent: View {
                     NotificationCenter.default.post(name: .NotchyExpandPanel, object: nil)
                 }
 
-                // Temporary debug: force taskCompleted on the active session
-                iconButton(icon: "flask", isActive: false) {
-                    if let id = store.activeSessionId {
-                        store.updateTerminalStatus(id, status: .taskCompleted)
-                    }
-                }
+                pinButton
+                quitButton
             }
             .transition(.move(edge: .leading).combined(with: .opacity))
         }
@@ -75,11 +71,6 @@ struct NotchPillContent: View {
     private func rightContent(isHovering: Bool) -> some View {
         HStack(spacing: 14) {
             statusContent(isHovering: isHovering)
-
-            if isHovering {
-                pinButton
-                quitButton
-            }
         }
         .transition(.scale.combined(with: .opacity))
     }
@@ -88,10 +79,8 @@ struct NotchPillContent: View {
     private func statusContent(isHovering: Bool) -> some View {
         if displayState != .idle {
             statusIndicator
-            botFace(state: displayState)
-        } else if !isHovering {
-            botFace(state: .taskCompleted)
         }
+        botFace(state: displayState)
     }
 
     @ViewBuilder
