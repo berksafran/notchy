@@ -260,45 +260,59 @@ class SessionStore {
 
     func updateTerminalStatus(_ id: UUID, status: TerminalStatus) {
         guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
-        if sessions[index].terminalStatus != status {
-            let previous = sessions[index].terminalStatus
-            sessions[index].terminalStatus = status
-            updateSleepPrevention()
+        let previous = sessions[index].terminalStatus
+        guard previous != status else { return }
 
-            if status == .working && previous != .working {
-                sessions[index].workingStartedAt = Date()
-            }
-            if status == .waitingForInput && previous != .waitingForInput {
+        sessions[index].terminalStatus = status
+        updateSleepPrevention()
+
+        switch status {
+        case .working:
+            if previous != .working { sessions[index].workingStartedAt = Date() }
+
+        case .waitingForInput:
+            if previous != .waitingForInput {
                 playSound(named: "waitingForInput")
                 if isPinned && !isTerminalExpanded && id == activeSessionId {
                     isTerminalExpanded = true
                     NotificationCenter.default.post(name: .NotchyToggleExpand, object: nil)
                 }
             }
-            else if status == .taskCompleted && previous != .taskCompleted {
-                playSound(named: "taskCompleted")
+
+        case .taskCompleted:
+            if previous != .taskCompleted { playSound(named: "taskCompleted") }
+
+        case .idle:
+            if previous == .working {
+                scheduleIdleToCompletedTransition(for: id, workingStartedAt: sessions[index].workingStartedAt)
             }
-            else if status == .idle && previous == .working {
-                // Delay 3s before treating as "task completed" — Claude sometimes
-                // goes working → idle → working again briefly.
-                let workingStartedAt = sessions[index].workingStartedAt
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(3))
-                    guard let idx = self.sessions.firstIndex(where: { $0.id == id }),
-                          self.sessions[idx].terminalStatus == .idle else { return }
-                    // Only trigger taskCompleted for tasks that ran >10s
-                    if let started = workingStartedAt, Date().timeIntervalSince(started) < 10 {
-                        return
-                    }
-                    SessionStore.shared.updateTerminalStatus(id, status: .taskCompleted)
-                    // Auto-clear taskCompleted after 3 seconds
-                    try? await Task.sleep(for: .seconds(3))
-                    guard let idx2 = self.sessions.firstIndex(where: { $0.id == id }),
-                          self.sessions[idx2].terminalStatus == .taskCompleted else { return }
-                    self.sessions[idx2].terminalStatus = .idle
-                    NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
-                }
-            }
+
+        default:
+            break
+        }
+    }
+
+    /// When a session goes working → idle, wait 3 s then promote to `.taskCompleted`
+    /// (only for tasks that ran > 10 s). Auto-clears after another 3 s.
+    private func scheduleIdleToCompletedTransition(for id: UUID, workingStartedAt: Date?) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+
+            // Bail out if the session changed state during the wait
+            guard let idx = sessions.firstIndex(where: { $0.id == id }),
+                  sessions[idx].terminalStatus == .idle else { return }
+
+            // Only promote tasks that ran more than 10 seconds
+            if let started = workingStartedAt, Date().timeIntervalSince(started) < 10 { return }
+
+            updateTerminalStatus(id, status: .taskCompleted)
+
+            // Auto-clear taskCompleted
+            try? await Task.sleep(for: .seconds(3))
+            guard let idx2 = sessions.firstIndex(where: { $0.id == id }),
+                  sessions[idx2].terminalStatus == .taskCompleted else { return }
+            sessions[idx2].terminalStatus = .idle
+            NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
         }
     }
 

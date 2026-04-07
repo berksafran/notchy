@@ -1,5 +1,8 @@
 import AppKit
 import SwiftUI
+
+// MARK: - AppDelegate
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var panel: TerminalPanel!
@@ -27,15 +30,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         sessionStore.detectAllXcodeProjectsAsync()
     }
 
+    // MARK: - Setup
+
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        if let button = statusItem.button {
-            button.image = NSImage(named: "menuIcon") //NSImage(systemSymbolName: "terminal", accessibilityDescription: "Notchy")
-            button.image?.isTemplate = true  // lets macOS handle light/dark mode
-            button.target = self
-            button.action = #selector(statusItemClicked(_:))
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        }
+        guard let button = statusItem.button else { return }
+        button.image = NSImage(named: "menuIcon")
+        button.image?.isTemplate = true // lets macOS handle light/dark mode
+        button.target = self
+        button.action = #selector(statusItemClicked(_:))
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
     }
 
     private func setupPanel() {
@@ -69,13 +73,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Observers
+
     private func observeNotchStatusChanges() {
         NotificationCenter.default.addObserver(forName: .NotchySettingsChanged, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
             if self.settings.showNotch {
-                if self.notchWindow == nil {
-                    self.setupNotchWindow()
-                }
+                if self.notchWindow == nil { self.setupNotchWindow() }
             } else {
                 self.notchWindow?.close()
                 self.notchWindow = nil
@@ -105,17 +109,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Notch hover
+
     private func notchHovered() {
         guard !panel.isVisible else { return }
-        showPanelBelowNotch()
+        if let screen = NSScreen.builtIn { panel.showPanelCentered(on: screen) }
         panelOpenedViaHover = true
         startHoverTracking()
         sessionStore.detectAndSwitchAsync()
-    }
-
-    private func showPanelBelowNotch() {
-        guard let screen = NSScreen.builtIn else { return }
-        panel.showPanelCentered(on: screen)
     }
 
     // MARK: - Hover-to-hide tracking
@@ -126,22 +127,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.checkHoverBounds()
         }
         hoverLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
-            self?.checkHoverBounds()
-            return event
+            self?.checkHoverBounds(); return event
         }
     }
 
     private func stopHoverTracking() {
         hoverHideTimer?.invalidate()
         hoverHideTimer = nil
-        if let monitor = hoverGlobalMonitor {
-            NSEvent.removeMonitor(monitor)
-            hoverGlobalMonitor = nil
-        }
-        if let monitor = hoverLocalMonitor {
-            NSEvent.removeMonitor(monitor)
-            hoverLocalMonitor = nil
-        }
+        [hoverGlobalMonitor, hoverLocalMonitor].compactMap { $0 }.forEach { NSEvent.removeMonitor($0) }
+        hoverGlobalMonitor = nil
+        hoverLocalMonitor  = nil
     }
 
     private func checkHoverBounds() {
@@ -183,6 +178,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hoverHideTimer = nil
     }
 
+    // MARK: - Status item / panel toggle
+
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
         showContextMenu()
     }
@@ -195,10 +192,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             stopHoverTracking()
         } else {
             panelOpenedViaHover = false
-            // Show panel immediately
             showPanelBelowStatusItem()
-
-            // Then detect projects in background
             sessionStore.detectAndSwitchAsync()
         }
     }

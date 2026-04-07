@@ -1,14 +1,36 @@
 import AppKit
 import SwiftUI
 
+// MARK: - ClickThroughHostingView
+
+/// An `NSHostingView` that accepts first-mouse events so the panel responds
+/// to clicks without requiring a prior activation click.
 class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
+// MARK: - TerminalPanel
+
+/// The main floating panel that hosts the terminal and settings UI.
+///
+/// Key behaviours:
+/// - Appears below the notch / status item with an expand animation
+/// - Hides with a fade-up animation when it loses focus (unless pinned)
+/// - Supports collapsing to tab-bar-only height via `NotchyToggleExpand`
+/// - Accepts `Cmd+S` (checkpoint) and `Cmd+T` (new session) key shortcuts
 class TerminalPanel: NSPanel {
-    private let sessionStore: SessionStore
+
+    // MARK: Constants
+
     private static let collapsedHeight: CGFloat = 44
+
+    // MARK: State
+
+    private let sessionStore: SessionStore
+    /// Saved full-height used to restore when expanding after a collapse.
     private var expandedHeight: CGFloat = 500
+
+    // MARK: Init
 
     init(sessionStore: SessionStore) {
         self.sessionStore = sessionStore
@@ -20,203 +42,155 @@ class TerminalPanel: NSPanel {
             defer: true
         )
 
+        configureWindow()
+
+        let content = PanelContentView(sessionStore: sessionStore, onClose: { [weak self] in self?.hidePanel() })
+        self.contentView = ClickThroughHostingView(rootView: content)
+
+        registerNotifications()
+    }
+
+    private func configureWindow() {
         isFloatingPanel = true
         level = .floating
-        isMovableByWindowBackground = true // Allow dragging by header
-        isMovable = true // Allow window to move
+        isMovableByWindowBackground = true
+        isMovable = true
         backgroundColor = .clear
         hasShadow = true
         isOpaque = false
         animationBehavior = .none
         hidesOnDeactivate = false
-        minSize = NSSize(width: 660, height: 480) // Increased by 20%
-
-        let contentView = PanelContentView(
-            sessionStore: sessionStore,
-            onClose: { [weak self] in self?.hidePanel() }
-        )
-        let hosting = ClickThroughHostingView(rootView: contentView)
-        self.contentView = hosting
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(windowDidResignKey),
-            name: NSWindow.didResignKeyNotification,
-            object: self
-        )
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(windowDidBecomeKey),
-            name: NSWindow.didBecomeKeyNotification,
-            object: self
-        )
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleHidePanel),
-            name: .NotchyHidePanel,
-            object: nil
-        )
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleExpandPanel),
-            name: .NotchyExpandPanel,
-            object: nil
-        )
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleToggleExpandNotification),
-            name: .NotchyToggleExpand,
-            object: nil
-        )
+        minSize = NSSize(width: 660, height: 480)
     }
 
-    private func getNotchHeight(for screen: NSScreen) -> CGFloat {
-        if #available(macOS 12.0, *),
-           let left = screen.auxiliaryTopLeftArea,
-           let right = screen.auxiliaryTopRightArea {
-            return screen.frame.maxY - min(left.minY, right.minY)
-        }
-        return screen.frame.maxY - screen.visibleFrame.maxY
+    private func registerNotifications() {
+        let center = NotificationCenter.default
+
+        center.addObserver(self, selector: #selector(windowDidResignKey),
+                           name: NSWindow.didResignKeyNotification, object: self)
+        center.addObserver(self, selector: #selector(windowDidBecomeKey),
+                           name: NSWindow.didBecomeKeyNotification, object: self)
+        center.addObserver(self, selector: #selector(handleHidePanel),
+                           name: .NotchyHidePanel, object: nil)
+        center.addObserver(self, selector: #selector(handleExpandPanel),
+                           name: .NotchyExpandPanel, object: nil)
+        center.addObserver(self, selector: #selector(handleToggleExpandNotification),
+                           name: .NotchyToggleExpand, object: nil)
     }
 
-    func showPanel(below rect: NSRect) {
-        if let screen = NSScreen.main {
-            let panelWidth = frame.width
-            let panelHeight = frame.height
-            let x = rect.midX - panelWidth / 2
+    // MARK: - Show / Hide
 
-            let notchHeight = getNotchHeight(for: screen)
-            let finalY = screen.frame.maxY - notchHeight - panelHeight + 8
-
-            if !isVisible {
-                let notchHeight = getNotchHeight(for: screen)
-                // Fiziksel notch varsa onun genişliğini al, yoksa standart 180 kullan
-                var nw: CGFloat = 180
-                if #available(macOS 12.0, *), 
-                   let left = screen.auxiliaryTopLeftArea, 
-                   let right = screen.auxiliaryTopRightArea {
-                    nw = right.minX - left.maxX
-                }
-
-                // Notch genişliğinden başlayarak yana doğru açılma (expand) animasyonu
-                let startWidth = nw
-                let startX = rect.midX - startWidth / 2
-                
-                alphaValue = 0.0
-                setFrame(NSRect(x: startX, y: finalY, width: startWidth, height: panelHeight), display: true)
-                makeKeyAndOrderFront(nil)
-                
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.35
-                    context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                    animator().alphaValue = 1.0
-                    animator().setFrame(NSRect(x: x, y: finalY, width: panelWidth, height: panelHeight), display: true)
-                }
-            } else {
-                setFrameOrigin(NSPoint(x: x, y: finalY))
-                makeKeyAndOrderFront(nil)
-            }
-        }
-        NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
+    /// Shows the panel expanding outward from `midX` of the given `anchor` rect.
+    func showPanel(below anchor: NSRect) {
+        guard let screen = NSScreen.main else { return }
+        showPanel(centeredAt: anchor.midX, screen: screen)
     }
 
+    /// Shows the panel expanding outward from the horizontal centre of `screen`.
     func showPanelCentered(on screen: NSScreen) {
-        let screenFrame = screen.frame
-        let panelWidth = frame.width
-        let panelHeight = frame.height
-        let x = screenFrame.midX - panelWidth / 2
+        showPanel(centeredAt: screen.frame.midX, screen: screen)
+    }
 
-        let notchHeight = getNotchHeight(for: screen)
-        let finalY = screenFrame.maxY - notchHeight - panelHeight + 8
+    /// Core show implementation — eliminates duplicated code from the two public entry-points.
+    private func showPanel(centeredAt midX: CGFloat, screen: NSScreen) {
+        let notchH = notchHeight(for: screen)
+        let finalY = screen.frame.maxY - notchH - frame.height
+        let targetX = midX - frame.width / 2
 
-        if !isVisible {
-            let notchHeight = getNotchHeight(for: screen)
-            // Fiziksel notch varsa onun genişliğini al, yoksa standart 180 kullan
-            var nw: CGFloat = 180
-            if #available(macOS 12.0, *), 
-               let left = screen.auxiliaryTopLeftArea, 
-               let right = screen.auxiliaryTopRightArea {
-                nw = right.minX - left.maxX
-            }
-
-            // Notch genişliğinden başlayarak yana doğru açılma (expand) animasyonu
-            let startWidth = nw
-            let startX = screenFrame.midX - startWidth / 2
-            
-            alphaValue = 0.0
-            setFrame(NSRect(x: startX, y: finalY, width: startWidth, height: panelHeight), display: true)
+        if isVisible {
+            setFrameOrigin(NSPoint(x: targetX, y: finalY))
             makeKeyAndOrderFront(nil)
-            
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.35
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                animator().alphaValue = 1.0
-                animator().setFrame(NSRect(x: x, y: finalY, width: panelWidth, height: panelHeight), display: true)
-            }
         } else {
-            setFrameOrigin(NSPoint(x: x, y: finalY))
-            makeKeyAndOrderFront(nil)
+            animateIn(centeredAt: midX, finalX: targetX, finalY: finalY, screen: screen)
         }
         NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
+    }
+
+    /// Fly-in animation: starts at notch width, expands to full panel width.
+    private func animateIn(centeredAt midX: CGFloat, finalX: CGFloat, finalY: CGFloat, screen: NSScreen) {
+        // Capture dimensions BEFORE calling setFrame — setFrame will overwrite frame.width/height.
+        let panelWidth  = frame.width
+        let panelHeight = frame.height
+
+        let startWidth = physicalNotchWidth(for: screen)
+        let startX     = midX - startWidth / 2
+
+        alphaValue = 0
+        setFrame(NSRect(x: startX, y: finalY, width: startWidth, height: panelHeight), display: true)
+        makeKeyAndOrderFront(nil)
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.35
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            animator().alphaValue = 1
+            animator().setFrame(NSRect(x: finalX, y: finalY, width: panelWidth, height: panelHeight), display: true)
+        }
     }
 
     func hidePanel() {
         guard isVisible else { return }
-        
-        let startY = frame.origin.y
-        let endY = startY + 20
-        
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.2
-            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            animator().alphaValue = 0.0
-            animator().setFrameOrigin(NSPoint(x: frame.origin.x, y: endY))
+
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            animator().alphaValue = 0
+            animator().setFrameOrigin(NSPoint(x: frame.origin.x, y: frame.origin.y + 20))
         }) { [weak self] in
             self?.orderOut(nil)
         }
     }
 
-    private func handleToggleExpand() {
+    // MARK: - Expand / Collapse
+
+    private func toggleExpand() {
         updateOpacity()
         if sessionStore.isTerminalExpanded {
-            // Expanding: restore saved height, anchor top edge
-            let newHeight = expandedHeight
-            var newFrame = frame
-            newFrame.origin.y -= (newHeight - frame.height)
-            newFrame.size.height = newHeight
-            minSize = NSSize(width: 480, height: 300)
-            setFrame(newFrame, display: true, animate: false)
+            restoreExpandedHeight()
         } else {
-            // Collapsing: save current height, shrink to tab bar only
-            expandedHeight = frame.height
-            let newHeight = Self.collapsedHeight
-            var newFrame = frame
-            newFrame.origin.y += (frame.height - newHeight)
-            newFrame.size.height = newHeight
-            minSize = NSSize(width: 480, height: Self.collapsedHeight)
-            setFrame(newFrame, display: true, animate: false)
+            collapseToTabBar()
         }
     }
 
-    @objc private func handleHidePanel() {
-        hidePanel()
+    private func restoreExpandedHeight() {
+        var newFrame = frame
+        newFrame.origin.y   -= expandedHeight - frame.height
+        newFrame.size.height = expandedHeight
+        minSize = NSSize(width: 480, height: 300)
+        setFrame(newFrame, display: true, animate: false)
     }
 
-    @objc private func handleExpandPanel() {
-        handleToggleExpand()
+    private func collapseToTabBar() {
+        expandedHeight       = frame.height
+        var newFrame         = frame
+        newFrame.origin.y   += frame.height - Self.collapsedHeight
+        newFrame.size.height = Self.collapsedHeight
+        minSize = NSSize(width: 480, height: Self.collapsedHeight)
+        setFrame(newFrame, display: true, animate: false)
     }
+
+    // MARK: - Opacity
+
+    private func updateOpacity() {
+        let dimmed = !sessionStore.isTerminalExpanded && !isKeyWindow
+        alphaValue      = dimmed ? 0.8 : 1.0
+        backgroundColor = .clear
+    }
+
+    // MARK: - Notification handlers
+
+    @objc private func handleHidePanel() { hidePanel() }
+
+    @objc private func handleExpandPanel() { toggleExpand() }
 
     @objc private func handleToggleExpandNotification() {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.35
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            handleToggleExpand()
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.35
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            toggleExpand()
         }
     }
+
+    // MARK: - Window delegate
 
     @objc private func windowDidBecomeKey(_ notification: Notification) {
         sessionStore.panelDidBecomeKey()
@@ -224,44 +198,63 @@ class TerminalPanel: NSPanel {
     }
 
     @objc private func windowDidResignKey(_ notification: Notification) {
-        if !sessionStore.isPinned && !sessionStore.isShowingDialog && attachedSheet == nil && childWindows?.isEmpty ?? true {
+        if !sessionStore.isPinned && !sessionStore.isShowingDialog
+            && attachedSheet == nil && (childWindows?.isEmpty ?? true) {
             hidePanel()
         }
         updateOpacity()
     }
 
-    private func updateOpacity() {
-        let collapsed = !sessionStore.isTerminalExpanded
-        let unfocused = !isKeyWindow
-        // Collapsed + unfocused: dim the whole window
-        alphaValue = (collapsed && unfocused) ? 0.8 : 1.0
-        // Expanded + unfocused: clear window background so SwiftUI chrome
-        // transparency shows through (terminal stays opaque via its own view)
-        backgroundColor = .clear
-    }
+    // MARK: - Event overrides
 
+    /// Re-sends the first left-click so SwiftUI controls process it even when
+    /// the panel wasn't focused (first click normally just activates the window).
     override func sendEvent(_ event: NSEvent) {
         let wasKey = isKeyWindow
         super.sendEvent(event)
-        // When the panel wasn't key, the first click just activates the window.
-        // Re-send it so SwiftUI controls (tabs, buttons) process the click too.
         if !wasKey && event.type == .leftMouseDown {
             super.sendEvent(event)
         }
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "s" {
-            sessionStore.createCheckpointForActiveSession()
-            return true
-        }
-        if event.modifierFlags.contains(.command) && event.charactersIgnoringModifiers == "t" {
-            sessionStore.createQuickSession()
-            return true
+        if event.modifierFlags.contains(.command) {
+            switch event.charactersIgnoringModifiers {
+            case "s":
+                sessionStore.createCheckpointForActiveSession()
+                return true
+            case "t":
+                sessionStore.createQuickSession()
+                return true
+            default:
+                break
+            }
         }
         return super.performKeyEquivalent(with: event)
     }
 
-    override var canBecomeKey: Bool { true }
+    override var canBecomeKey: Bool  { true }
     override var canBecomeMain: Bool { true }
+
+    // MARK: - Geometry helpers
+
+    /// Height of the physical notch (or menu bar) on the given screen.
+    private func notchHeight(for screen: NSScreen) -> CGFloat {
+        if #available(macOS 12.0, *),
+           let left  = screen.auxiliaryTopLeftArea,
+           let right = screen.auxiliaryTopRightArea {
+            return screen.frame.maxY - min(left.minY, right.minY)
+        }
+        return screen.frame.maxY - screen.visibleFrame.maxY
+    }
+
+    /// Width of the physical notch on the given screen (fallback: 180 pt).
+    private func physicalNotchWidth(for screen: NSScreen) -> CGFloat {
+        if #available(macOS 12.0, *),
+           let left  = screen.auxiliaryTopLeftArea,
+           let right = screen.auxiliaryTopRightArea {
+            return right.minX - left.maxX
+        }
+        return 180
+    }
 }

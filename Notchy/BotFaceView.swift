@@ -6,29 +6,27 @@ struct BotFaceView: View {
 
     var body: some View {
         Image("face")
+            .renderingMode(.template)
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .scaleEffect(state == .working ? pulse : 1.0)
+            .foregroundColor(faceColor)
+            .scaleEffect(state == .working ? (1.0 + (pulse - 1.0) * 0.15) : 1.0)
             .opacity(state == .waitingForInput ? pulse : 1.0)
-            .animation(
-                state == .working || state == .waitingForInput 
-                    ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true)
-                    : .default,
-                value: pulse
-            )
             .onAppear {
-                pulse = 1.15
+                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                    pulse = 0.5
+                }
             }
             .clipped()
-            .shadow(color: glowColor.opacity(0.6), radius: state != .idle ? 5 : 0)
+            .shadow(color: faceColor.opacity(0.6), radius: state != .idle ? 5 : 0)
     }
 
-    private var glowColor: Color {
+    private var faceColor: Color {
         switch state {
-        case .working: return .blue
+        case .working: return .yellow
         case .waitingForInput: return .yellow
-        case .taskCompleted: return .green
-        case .idle: return .clear
+        case .taskCompleted: return .white
+        case .idle: return .white
         }
     }
 }
