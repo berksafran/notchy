@@ -236,10 +236,10 @@ class NotchWindow: NSPanel {
 
         case (true, true):
             // Already expanded — cancel any pending collapse and check if width changed.
-            // Skip if a hover animation is currently in flight to avoid competing transitions.
+            // Skip if hover is active or animating — hover already manages the target width.
             collapseDebounceTimer?.invalidate()
             collapseDebounceTimer = nil
-            guard !isHoverTransitioning else { break }
+            guard !isHoverTransitioning, !isHovered else { break }
             let targetWidth = currentTargetWidth()
             if abs(frame.width - targetWidth) > 1 {
                 animateWidthTransition(to: targetWidth)
@@ -256,8 +256,28 @@ class NotchWindow: NSPanel {
         isExpanded = true
         guard let screen = NSScreen.builtIn else { return }
 
+        // If a hover animation is currently in flight, don't interrupt it.
+        // hoverGrow() already animates to the correct hover width, which is the
+        // right final state for an expanded+hovered notch. Stopping that animation
+        // and restarting from the current (mid-hover) frame causes the visible
+        // "expand → shrink → expand" jitter reported by the user.
+        guard !isHoverTransitioning else {
+            pillView.alphaValue      = 1
+            pillContentHost?.alphaValue = 1
+            return
+        }
+
         var targetFrame = centeredFrame(width: currentTargetWidth(), screen: screen)
         if isHovered { targetFrame = applyHoverGrow(to: targetFrame) }
+
+        // Skip animation if we are already at the target (avoids killing concurrent animations).
+        let atTarget = abs(frame.width - targetFrame.width) <= 1
+                    && abs(frame.origin.x - targetFrame.origin.x) <= 1
+        guard !atTarget else {
+            pillView.alphaValue      = 1
+            pillContentHost?.alphaValue = 1
+            return
+        }
 
         pillView.alphaValue       = 1
         pillContentHost?.alphaValue = 1
@@ -339,7 +359,20 @@ class NotchWindow: NSPanel {
         let targetProtrusion = NotchPillView.earRadius
         let startProtrusion  = pillView.earProtrusion
 
-        animateFrame(to: targetFrame, duration: 0.25, easing: Self.easeInOut, perFrame: { [weak self] ease in
+        // If the notch is already expanded (e.g. waitingForInput), derive the
+        // start frame from the *fully-expanded* position rather than the current
+        // (possibly mid-animation) frame. This prevents a backward jitter where
+        // the notch visually shrinks before growing to the hover width.
+        let expandedFrame: NSRect
+        if isExpanded, let screen = NSScreen.builtIn {
+            expandedFrame = centeredFrame(width: currentTargetWidth(forHovered: false), screen: screen)
+        } else {
+            expandedFrame = frame
+        }
+
+        animateFrame(to: targetFrame, duration: 0.25, easing: Self.easeInOut,
+                     startFrame: expandedFrame,
+                     perFrame: { [weak self] ease in
             DispatchQueue.main.async {
                 self?.pillView.earProtrusion = startProtrusion + (targetProtrusion - startProtrusion) * ease
             }
@@ -462,17 +495,19 @@ class NotchWindow: NSPanel {
         )
     }
 
-    /// Animates from the current frame to `targetFrame` over `duration` seconds.
+    /// Animates from `startFrame` (defaults to current frame) to `targetFrame` over `duration` seconds.
+    /// - `startFrame`: Override the animation start position. Defaults to current window frame.
     /// - `perFrame`: Called with the current interpolation factor (0…1) on the display link thread.
     /// - `completion`: Called on the main thread once the animation finishes.
     private func animateFrame(
         to targetFrame: NSRect,
         duration: Double,
         easing: @escaping (Double) -> Double,
+        startFrame overrideStart: NSRect? = nil,
         perFrame: ((Double) -> Void)? = nil,
         completion: (() -> Void)? = nil
     ) {
-        let startFrame = frame
+        let startFrame = overrideStart ?? frame
         let startTime  = CACurrentMediaTime()
 
         activeDisplayLink?.stop()
