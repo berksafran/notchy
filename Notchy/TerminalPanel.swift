@@ -94,7 +94,7 @@ class TerminalPanel: NSPanel {
     /// Core show implementation — eliminates duplicated code from the two public entry-points.
     private func showPanel(centeredAt midX: CGFloat, screen: NSScreen) {
         let notchH = notchHeight(for: screen)
-        let finalY = screen.frame.maxY - notchH - frame.height
+        let finalY = screen.frame.maxY - notchH - frame.height + 1  // +1 overlaps the NotchWindow by 1pt to close the seam
         let targetX = midX - frame.width / 2
 
         if isVisible {

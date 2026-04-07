@@ -27,7 +27,6 @@ struct PanelContentView: View {
         .overlay(
             ClassicPanelShape(cornerRadius: 20)
                 .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                .padding(.top, 1)  // Shift border down so it doesn't bleed above the panel edge
         )
     }
 

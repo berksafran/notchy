@@ -76,7 +76,7 @@ class NotchPillView: NSView {
     /// - `bottomRadius`: Convex corner radius at the bottom (0 when hovered → flat bottom).
     private func buildBodyPath(width w: CGFloat, height h: CGFloat) -> CGPath {
         let topRadius: CGFloat    = 8.0
-        let bottomRadius: CGFloat = 0.0  // Always flat bottom — sits flush against the panel
+        let bottomRadius: CGFloat = isHovered ? 0.0 : 14.0
 
         let path = CGMutablePath()
 
