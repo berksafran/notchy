@@ -34,6 +34,9 @@ class NotchWindow: NSPanel {
 
     private var isExpanded = false
     private var isHovered  = false
+    /// True while hoverGrow / hoverShrink animations are in flight.
+    /// Prevents the polling timer from interrupting them with a competing width transition.
+    private var isHoverTransitioning = false
 
     /// Prevents rapid expand/collapse cycling when terminal status flickers.
     private var collapseDebounceTimer: Timer?
@@ -220,9 +223,11 @@ class NotchWindow: NSPanel {
             }
 
         case (true, true):
-            // Already expanded — cancel any pending collapse and check if width changed
+            // Already expanded — cancel any pending collapse and check if width changed.
+            // Skip if a hover animation is currently in flight to avoid competing transitions.
             collapseDebounceTimer?.invalidate()
             collapseDebounceTimer = nil
+            guard !isHoverTransitioning else { break }
             let targetWidth = currentTargetWidth()
             if abs(frame.width - targetWidth) > 1 {
                 animateWidthTransition(to: targetWidth)
@@ -316,6 +321,7 @@ class NotchWindow: NSPanel {
     private func hoverGrow() {
         pillView.isHovered = true
         NotchPillModel.shared.isHovering = true
+        isHoverTransitioning = true
 
         let targetFrame    = applyHoverGrow(to: frame)
         let targetProtrusion = NotchPillView.earRadius
@@ -325,12 +331,15 @@ class NotchWindow: NSPanel {
             DispatchQueue.main.async {
                 self?.pillView.earProtrusion = startProtrusion + (targetProtrusion - startProtrusion) * ease
             }
+        }, completion: { [weak self] in
+            self?.isHoverTransitioning = false
         })
     }
 
     private func hoverShrink() {
         NotchPillModel.shared.isHovering = false
         pillView.isHovered = false
+        isHoverTransitioning = true
 
         guard let screen = NSScreen.builtIn else { return }
         let w = currentTargetWidth(forHovered: false)
@@ -347,6 +356,7 @@ class NotchWindow: NSPanel {
             }
         }, completion: { [weak self] in
             self?.pillView.isHovered = false
+            self?.isHoverTransitioning = false
         })
     }
 
