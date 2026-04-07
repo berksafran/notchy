@@ -60,6 +60,14 @@ struct NotchPillContent: View {
 
                 pinButton
                 quitButton
+                
+                // Temporary Debug Button
+                Button(action: { store.debugCycleStatus() }) {
+                    Image(systemName: "flask")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.purple)
+                }
+                .buttonStyle(.plain)
             }
             .transition(.move(edge: .leading).combined(with: .opacity))
         }
@@ -104,10 +112,10 @@ struct NotchPillContent: View {
     private func botFace(state: NotchDisplayState) -> some View {
         Rectangle()
             .foregroundColor(.clear)
-            .frame(width: 18, height: 18)
+            .frame(width: 22, height: 22)
             .overlay(alignment: .trailing) {
                 BotFaceView(state: state)
-                    .frame(width: 20, height: 15)
+                    .frame(width: 26, height: 19)
                     .mask(RoundedRectangle(cornerRadius: 5))
             }
     }

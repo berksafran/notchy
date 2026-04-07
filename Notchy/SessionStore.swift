@@ -442,4 +442,19 @@ class SessionStore {
         }
         persistSessions()
     }
+
+    /// DEBUG: Cycle through terminal states to test UI animations and icons
+    func debugCycleStatus() {
+        guard let id = activeSessionId, let index = sessions.firstIndex(where: { $0.id == id }) else { return }
+        let current = sessions[index].terminalStatus
+        let next: TerminalStatus
+        switch current {
+        case .idle: next = .working
+        case .working: next = .waitingForInput
+        case .waitingForInput: next = .taskCompleted
+        case .taskCompleted: next = .idle
+        default: next = .idle
+        }
+        updateTerminalStatus(id, status: next)
+    }
 }

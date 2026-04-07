@@ -6,10 +6,9 @@ struct BotFaceView: View {
 
     var body: some View {
         Image("face")
-            .renderingMode(.template)
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .foregroundColor(faceColor)
+            .colorMultiply(faceColor)
             .scaleEffect(state == .working ? (1.0 + (pulse - 1.0) * 0.15) : 1.0)
             .opacity(state == .waitingForInput ? pulse : 1.0)
             .onAppear {
