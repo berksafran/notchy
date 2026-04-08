@@ -26,8 +26,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         setupHotkey()
         observeNotchStatusChanges()
-        // Detect in background so launch isn't blocked
-        sessionStore.detectAllXcodeProjectsAsync()
     }
 
     // MARK: - Setup
@@ -120,7 +118,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let screen = NSScreen.builtIn { panel.showPanelCentered(on: screen) }
         panelOpenedViaHover = true
         startHoverTracking()
-        sessionStore.detectAndSwitchAsync()
     }
 
 
@@ -198,7 +195,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             panelOpenedViaHover = false
             showPanelBelowStatusItem()
-            sessionStore.detectAndSwitchAsync()
         }
     }
 

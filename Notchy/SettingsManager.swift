@@ -18,9 +18,6 @@ class SettingsManager {
     var soundsEnabled: Bool {
         didSet { UserDefaults.standard.set(soundsEnabled, forKey: Keys.soundsEnabled) }
     }
-    var xcodeIntegrationEnabled: Bool {
-        didSet { UserDefaults.standard.set(xcodeIntegrationEnabled, forKey: Keys.xcodeIntegration) }
-    }
     var claudeIntegrationEnabled: Bool {
         didSet { UserDefaults.standard.set(claudeIntegrationEnabled, forKey: Keys.claudeIntegration) }
     }
@@ -36,14 +33,12 @@ class SettingsManager {
         defaults.register(defaults: [
             Keys.showNotch:        true,
             Keys.soundsEnabled:    true,
-            Keys.xcodeIntegration: true,
             Keys.claudeIntegration: true,
             Keys.revealOnHover:    true,
         ])
 
         showNotch                = defaults.bool(forKey: Keys.showNotch)
         soundsEnabled            = defaults.bool(forKey: Keys.soundsEnabled)
-        xcodeIntegrationEnabled  = defaults.bool(forKey: Keys.xcodeIntegration)
         claudeIntegrationEnabled = defaults.bool(forKey: Keys.claudeIntegration)
         revealOnHover            = defaults.bool(forKey: Keys.revealOnHover)
     }
@@ -53,7 +48,6 @@ class SettingsManager {
     private enum Keys {
         static let showNotch        = "replaceNotch"
         static let soundsEnabled    = "soundsEnabled"
-        static let xcodeIntegration = "xcodeIntegrationEnabled"
         static let claudeIntegration = "claudeIntegrationEnabled"
         static let revealOnHover    = "revealOnHover"
     }

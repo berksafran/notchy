@@ -126,7 +126,6 @@ struct PanelContentView: View {
                 }
                 
                 SettingsSection(title: "Integrations") {
-                    SettingToggleRow(title: "Xcode detection", description: "Automatically detect active Xcode projects and open sessions.", isOn: $settings.xcodeIntegrationEnabled)
                     SettingToggleRow(title: "Claude status updates", description: "Shows real-time status updates.", isOn: $settings.claudeIntegrationEnabled)
                 }
 
@@ -257,6 +256,7 @@ struct NotchBar: View {
         }
         .frame(height: notchHeight)
     }
+
 
     static func computeNotchHeight() -> CGFloat {
         guard let screen = NSScreen.builtIn else { return 37 }
