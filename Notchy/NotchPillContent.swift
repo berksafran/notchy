@@ -36,7 +36,7 @@ struct NotchPillContent: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
-        .offset(y: isHovering ? -3 : -2)
+        .offset(y: isHovering ? 0 : -2)
         .onChange(of: displayState) {
             NotificationCenter.default.post(name: .NotchyNotchStatusChanged, object: nil)
         }
