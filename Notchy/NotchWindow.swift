@@ -138,7 +138,7 @@ class NotchWindow: NSPanel {
     // MARK: - Notch size detection
 
     private func detectNotchSize() {
-        guard let screen = NSScreen.builtIn else { return }
+        guard let screen = NSScreen.target else { return }
 
         if #available(macOS 12.0, *),
            let left  = screen.auxiliaryTopLeftArea,
@@ -155,16 +155,17 @@ class NotchWindow: NSPanel {
     // MARK: - Positioning
 
     private func positionAtNotch() {
-        guard let screen = NSScreen.builtIn else { return }
+        guard let screen = NSScreen.target else { return }
         let sf = screen.frame
         let w  = currentTargetWidth()
         setFrame(NSRect(x: sf.midX - w / 2, y: sf.maxY - baseNotchHeight,
                         width: w, height: baseNotchHeight), display: true)
     }
 
-    /// Called when the panel layout changes externally (e.g. screen resolution switch).
+    /// Called when the panel layout changes externally (e.g. screen resolution switch or monitor preference change).
     func layoutDidChange() {
         isHovered = false
+        detectNotchSize()
         positionAtNotch()
     }
 
@@ -216,7 +217,9 @@ class NotchWindow: NSPanel {
     }
 
     private func updateExpansionState() {
-        let shouldExpand = NotchDisplayState.current != .idle
+        let state = NotchDisplayState.current
+        pillView.displayState = state
+        let shouldExpand = state != .idle
 
         switch (shouldExpand, isExpanded) {
         case (true, false):
@@ -254,7 +257,7 @@ class NotchWindow: NSPanel {
 
     private func expandWithBounce() {
         isExpanded = true
-        guard let screen = NSScreen.builtIn else { return }
+        guard let screen = NSScreen.target else { return }
 
         // If a hover animation is currently in flight, don't interrupt it.
         // hoverGrow() already animates to the correct hover width, which is the
@@ -295,7 +298,7 @@ class NotchWindow: NSPanel {
             }
         }
 
-        guard let screen = NSScreen.builtIn else { return }
+        guard let screen = NSScreen.target else { return }
         var targetFrame = centeredFrame(width: currentTargetWidth(forExpanded: false), screen: screen)
         if isHovered { targetFrame = applyHoverGrow(to: targetFrame) }
 
@@ -305,7 +308,7 @@ class NotchWindow: NSPanel {
     }
 
     private func animateWidthTransition(to targetWidth: CGFloat) {
-        guard let screen = NSScreen.builtIn else { return }
+        guard let screen = NSScreen.target else { return }
         let targetFrame = NSRect(
             x: screen.frame.midX - targetWidth / 2,
             y: frame.origin.y,
@@ -340,7 +343,7 @@ class NotchWindow: NSPanel {
 
     /// Returns a frame that matches the panel width. Height is always `baseNotchHeight`.
     private func applyHoverGrow(to rect: NSRect) -> NSRect {
-        guard let screen = NSScreen.builtIn else { return rect }
+        guard let screen = NSScreen.target else { return rect }
         let targetWidth = panelWidth?() ?? notchWidth + 160
         return NSRect(
             x: screen.frame.midX - targetWidth / 2,
@@ -355,30 +358,35 @@ class NotchWindow: NSPanel {
         NotchPillModel.shared.isHovering = true
         isHoverTransitioning = true
 
-        let targetFrame    = applyHoverGrow(to: frame)
+        guard let screen = NSScreen.target else { return }
+        let targetWidth  = panelWidth?() ?? notchWidth + 160
         let targetProtrusion = NotchPillView.earRadius
         let startProtrusion  = pillView.earProtrusion
 
-        // If the notch is already expanded (e.g. waitingForInput), derive the
-        // start frame from the *fully-expanded* position rather than the current
-        // (possibly mid-animation) frame. This prevents a backward jitter where
-        // the notch visually shrinks before growing to the hover width.
-        let expandedFrame: NSRect
-        if isExpanded, let screen = NSScreen.builtIn {
-            expandedFrame = centeredFrame(width: currentTargetWidth(forHovered: false), screen: screen)
+        // Başlangıç genişliği: zaten expand olduysa tam expand genişliği kullan,
+        // yoksa mevcut pencere genişliğini kullan.
+        let startWidth: CGFloat
+        if isExpanded {
+            startWidth = currentTargetWidth(forHovered: false)
         } else {
-            expandedFrame = frame
+            startWidth = frame.width
         }
 
-        animateFrame(to: targetFrame, duration: 0.25, easing: Self.easeInOut,
-                     startFrame: expandedFrame,
-                     perFrame: { [weak self] ease in
-            DispatchQueue.main.async {
-                self?.pillView.earProtrusion = startProtrusion + (targetProtrusion - startProtrusion) * ease
+        animateCenteredWidth(
+            from: startWidth,
+            to: targetWidth,
+            screen: screen,
+            duration: 0.25,
+            easing: Self.easeInOut,
+            perFrame: { [weak self] ease in
+                DispatchQueue.main.async {
+                    self?.pillView.earProtrusion = startProtrusion + (targetProtrusion - startProtrusion) * ease
+                }
+            },
+            completion: { [weak self] in
+                self?.isHoverTransitioning = false
             }
-        }, completion: { [weak self] in
-            self?.isHoverTransitioning = false
-        })
+        )
     }
 
     private func hoverShrink() {
@@ -386,23 +394,27 @@ class NotchWindow: NSPanel {
         pillView.isHovered = false
         isHoverTransitioning = true
 
-        guard let screen = NSScreen.builtIn else { return }
-        let w = currentTargetWidth(forHovered: false)
-        let targetFrame = NSRect(
-            x: screen.frame.midX - w / 2,
-            y: screen.frame.maxY - baseNotchHeight,
-            width: w, height: baseNotchHeight
-        )
+        guard let screen = NSScreen.target else { return }
+        let targetWidth   = currentTargetWidth(forHovered: false)
+        let startWidth    = frame.width
         let startProtrusion = pillView.earProtrusion
 
-        animateFrame(to: targetFrame, duration: 0.25, easing: Self.easeInOut, perFrame: { [weak self] ease in
-            DispatchQueue.main.async {
-                self?.pillView.earProtrusion = startProtrusion * (1.0 - ease)
+        animateCenteredWidth(
+            from: startWidth,
+            to: targetWidth,
+            screen: screen,
+            duration: 0.25,
+            easing: Self.easeInOut,
+            perFrame: { [weak self] ease in
+                DispatchQueue.main.async {
+                    self?.pillView.earProtrusion = startProtrusion * (1.0 - ease)
+                }
+            },
+            completion: { [weak self] in
+                self?.pillView.isHovered = false
+                self?.isHoverTransitioning = false
             }
-        }, completion: { [weak self] in
-            self?.pillView.isHovered = false
-            self?.isHoverTransitioning = false
-        })
+        )
     }
 
     // MARK: - Mouse tracking
@@ -418,7 +430,7 @@ class NotchWindow: NSPanel {
     }
 
     private func checkMouse() {
-        guard let screen = NSScreen.builtIn else { return }
+        guard let screen = NSScreen.target else { return }
         let mouse = NSEvent.mouseLocation
         let w = currentTargetWidth()
 
@@ -525,6 +537,40 @@ class NotchWindow: NSPanel {
 
             DispatchQueue.main.async {
                 self.setFrame(NSRect(x: x, y: y, width: w, height: h), display: true)
+                if t >= 1.0 { completion?() }
+            }
+            return t < 1.0
+        }
+        activeDisplayLink?.start()
+    }
+
+    /// Ekranın ortasına göre yalnızca genişliği animasyon yaparken x'i her frame'de
+    /// `midX - w/2` olarak günceller. Bu, her iki tarafa tam simetrik genişleme/daralma sağlar.
+    private func animateCenteredWidth(
+        from startWidth: CGFloat,
+        to targetWidth: CGFloat,
+        screen: NSScreen,
+        duration: Double,
+        easing: @escaping (Double) -> Double,
+        perFrame: ((Double) -> Void)? = nil,
+        completion: (() -> Void)? = nil
+    ) {
+        let startTime = CACurrentMediaTime()
+        let midX      = screen.frame.midX
+        let y         = screen.frame.maxY - baseNotchHeight
+
+        activeDisplayLink?.stop()
+        activeDisplayLink = CVDisplayLinkWrapper { [weak self] in
+            guard let self else { return false }
+            let t    = min((CACurrentMediaTime() - startTime) / duration, 1.0)
+            let ease = easing(t)
+            let w    = startWidth + (targetWidth - startWidth) * ease
+            let x    = midX - w / 2
+
+            perFrame?(ease)
+
+            DispatchQueue.main.async {
+                self.setFrame(NSRect(x: x, y: y, width: w, height: self.baseNotchHeight), display: true)
                 if t >= 1.0 { completion?() }
             }
             return t < 1.0

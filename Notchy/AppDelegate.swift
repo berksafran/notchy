@@ -76,7 +76,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(forName: .NotchySettingsChanged, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
             if self.settings.showNotch {
-                if self.notchWindow == nil { self.setupNotchWindow() }
+                if self.notchWindow == nil {
+                    self.setupNotchWindow()
+                } else {
+                    self.notchWindow?.layoutDidChange()
+                }
             } else {
                 self.notchWindow?.close()
                 self.notchWindow = nil
@@ -109,7 +113,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func notchHovered() {
         guard !panel.isVisible else { return }
-        if let screen = NSScreen.builtIn { panel.showPanelCentered(on: screen) }
+        if let screen = NSScreen.target { panel.showPanelCentered(on: screen) }
         panelOpenedViaHover = true
         startHoverTracking()
         notchWindow?.orderFrontRegardless() // Keep notch on top of the newly shown panel

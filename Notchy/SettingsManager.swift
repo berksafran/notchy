@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 // MARK: - SettingsManager
 
@@ -24,6 +24,15 @@ class SettingsManager {
     var revealOnHover: Bool {
         didSet { UserDefaults.standard.set(revealOnHover, forKey: Keys.revealOnHover) }
     }
+    var preferredScreenID: CGDirectDisplayID? {
+        didSet {
+            if let id = preferredScreenID {
+                UserDefaults.standard.set(id, forKey: Keys.preferredScreenID)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Keys.preferredScreenID)
+            }
+        }
+    }
 
     // MARK: Init
 
@@ -35,12 +44,15 @@ class SettingsManager {
             Keys.soundsEnabled:    true,
             Keys.claudeIntegration: true,
             Keys.revealOnHover:    true,
+            Keys.preferredScreenID: 0, // 0 means use built-in / default logic
         ])
 
         showNotch                = defaults.bool(forKey: Keys.showNotch)
         soundsEnabled            = defaults.bool(forKey: Keys.soundsEnabled)
         claudeIntegrationEnabled = defaults.bool(forKey: Keys.claudeIntegration)
         revealOnHover            = defaults.bool(forKey: Keys.revealOnHover)
+        let savedID = UInt32(defaults.integer(forKey: Keys.preferredScreenID))
+        preferredScreenID = savedID == 0 ? nil : savedID
     }
 
     // MARK: - Keys
@@ -50,5 +62,6 @@ class SettingsManager {
         static let soundsEnabled    = "soundsEnabled"
         static let claudeIntegration = "claudeIntegrationEnabled"
         static let revealOnHover    = "revealOnHover"
+        static let preferredScreenID = "preferredScreenID"
     }
 }

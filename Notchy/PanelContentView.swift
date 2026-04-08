@@ -124,6 +124,25 @@ struct PanelContentView: View {
                     SettingToggleRow(title: "Reveal panel on hover", description: "Automatically open the terminal panel when hovering over the notch.", isOn: $settings.revealOnHover)
                     SettingToggleRow(title: "Enable sounds", description: "Play subtle sound effects for Claude task completion.", isOn: $settings.soundsEnabled)
                 }
+
+                SettingsSection(title: "Display") {
+                    SettingPickerRow(
+                        title: "Active Display",
+                        description: "Choose which monitor the notch and panel should appear on.",
+                        selection: $settings.preferredScreenID
+                    ) {
+                        Text("Auto (Built-in Notch)")
+                            .tag(CGDirectDisplayID?.none)
+                        
+                        ForEach(NSScreen.screens, id: \.displayID) { screen in
+                            Text(screen.localizedName + (screen.isBuiltIn ? " (Built-in)" : ""))
+                                .tag(CGDirectDisplayID?.some(screen.displayID))
+                        }
+                    }
+                    .onChange(of: settings.preferredScreenID) {
+                        NotificationCenter.default.post(name: .NotchySettingsChanged, object: nil)
+                    }
+                }
                 
                 SettingsSection(title: "Integrations") {
                     SettingToggleRow(title: "Claude status updates", description: "Shows real-time status updates.", isOn: $settings.claudeIntegrationEnabled)
@@ -155,6 +174,8 @@ struct PanelContentView: View {
             }
             .padding(32)
         }
+        .preferredColorScheme(.dark)
+        .environment(\.colorScheme, .dark)
     }
 
     private func placeholderView(_ message: String) -> some View {
@@ -169,11 +190,78 @@ struct PanelContentView: View {
 // MARK: - Helper Views
 
 
+struct SettingPickerRow<Content: View, Selection: Hashable>: View {
+    let title: String
+    let description: String
+    @Binding var selection: Selection
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(.white)
+                Text(description)
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+
+            Spacer()
+
+            Picker("", selection: $selection) {
+                content
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .colorScheme(.dark)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.white.opacity(0.12))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.white.opacity(0.25), lineWidth: 1)
+            )
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+struct DarkToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        let isOn = configuration.isOn
+
+        HStack {
+            configuration.label
+
+            Spacer()
+
+            ZStack(alignment: isOn ? .trailing : .leading) {
+                Capsule()
+                    .fill(isOn ? Color(red: 0.2, green: 0.78, blue: 0.35) : Color.white.opacity(0.2))
+                    .frame(width: 44, height: 26)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isOn)
+
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 22, height: 22)
+                    .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+                    .padding(2)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isOn)
+            }
+            .onTapGesture {
+                configuration.isOn.toggle()
+            }
+        }
+    }
+}
+
 struct SettingToggleRow: View {
     let title: String
     let description: String
     @Binding var isOn: Bool
-    
+
     var body: some View {
         Toggle(isOn: $isOn) {
             VStack(alignment: .leading, spacing: 4) {
@@ -186,7 +274,7 @@ struct SettingToggleRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .toggleStyle(.switch)
+        .toggleStyle(DarkToggleStyle())
         .padding(.vertical, 4)
     }
 }
@@ -259,7 +347,7 @@ struct NotchBar: View {
 
 
     static func computeNotchHeight() -> CGFloat {
-        guard let screen = NSScreen.builtIn else { return 37 }
+        guard let screen = NSScreen.target else { return 37 }
         if #available(macOS 12.0, *),
            let left = screen.auxiliaryTopLeftArea,
            let right = screen.auxiliaryTopRightArea {

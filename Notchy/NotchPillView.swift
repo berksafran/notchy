@@ -28,8 +28,18 @@ class NotchPillView: NSView {
 
     // MARK: Layers
 
-    private let shapeLayer = CAShapeLayer()
-    private let earLayer   = CAShapeLayer()
+    // MARK: Layers
+
+    private let shapeLayer    = CAShapeLayer()
+    private let gradientLayer = CAGradientLayer()
+    private let earLayer      = CAShapeLayer()
+
+    var displayState: NotchDisplayState = .idle {
+        didSet {
+            guard oldValue != displayState else { return }
+            updateAppearance()
+        }
+    }
 
     // MARK: Init
 
@@ -39,11 +49,21 @@ class NotchPillView: NSView {
         layer?.masksToBounds  = false
         layer?.backgroundColor = .clear
 
-        shapeLayer.fillColor = NSColor.black.cgColor
-        layer?.addSublayer(shapeLayer)
+        // Use shapeLayer as a mask for the gradient
+        shapeLayer.fillColor = NSColor.white.cgColor // White = Opaque for mask
+        // Anchor both layers to center so they grow equally in both directions
+        shapeLayer.anchorPoint    = CGPoint(x: 0.5, y: 0.5)
+        gradientLayer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        
+        gradientLayer.mask = shapeLayer
+        gradientLayer.startPoint = CGPoint(x: 0, y: 0.5)
+        gradientLayer.endPoint   = CGPoint(x: 1, y: 0.5)
+        layer?.addSublayer(gradientLayer)
 
         earLayer.fillColor = NSColor.black.cgColor
         layer?.addSublayer(earLayer)
+        
+        updateAppearance(animated: false)
     }
 
     required init?(coder: NSCoder) {
@@ -59,15 +79,52 @@ class NotchPillView: NSView {
 
     // MARK: Drawing
 
+    private func updateAppearance(animated: Bool = true) {
+        let colors: [CGColor]
+        if displayState == .idle {
+            // Premium gradient for idle state
+            colors = [
+                NSColor.systemIndigo.cgColor,
+                NSColor.systemPurple.cgColor
+            ]
+        } else {
+            // Solid black for other states
+            colors = [
+                NSColor.black.cgColor,
+                NSColor.black.cgColor
+            ]
+        }
+
+        if animated {
+            let anim = CABasicAnimation(keyPath: "colors")
+            anim.fromValue = gradientLayer.colors
+            anim.toValue = colors
+            anim.duration = 0.4
+            anim.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            gradientLayer.add(anim, forKey: "colorsChange")
+        }
+        gradientLayer.colors = colors
+    }
+
     private func updateShape() {
         let w = bounds.width
         let h = bounds.height
         guard w > 0, h > 0 else { return }
 
-        shapeLayer.frame = CGRect(x: 0, y: 0, width: w, height: h)
-        earLayer.isHidden = true
+        // Center both layers so they expand equally to left and right
+        let centerX = bounds.midX
+        let centerY = bounds.midY
 
-        shapeLayer.path = buildBodyPath(width: w, height: h)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        gradientLayer.bounds   = bounds
+        gradientLayer.position = CGPoint(x: centerX, y: centerY)
+        shapeLayer.bounds      = bounds
+        shapeLayer.position    = CGPoint(x: centerX, y: centerY)
+        CATransaction.commit()
+
+        earLayer.isHidden = true
+        shapeLayer.path   = buildBodyPath(width: w, height: h)
     }
 
     /// Builds the notch body path.
@@ -131,11 +188,25 @@ class NotchPillView: NSView {
 // MARK: - NSScreen helper
 
 extension NSScreen {
+    /// Returns the screen identified by the user's preference, or the built-in notch display as fallback.
+    static var target: NSScreen? {
+        if let preferredID = SettingsManager.shared.preferredScreenID,
+           let preferredScreen = NSScreen.screens.first(where: { $0.displayID == preferredID }) {
+            return preferredScreen
+        }
+        return builtIn
+    }
+
     /// Returns the built-in display (the one with the notch), or the main screen as fallback.
     static var builtIn: NSScreen? {
-        screens.first { screen in
-            let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID ?? 0
-            return CGDisplayIsBuiltin(id) != 0
-        } ?? main
+        screens.first { $0.isBuiltIn } ?? main
+    }
+
+    var displayID: CGDirectDisplayID {
+        deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID ?? 0
+    }
+
+    var isBuiltIn: Bool {
+        CGDisplayIsBuiltin(displayID) != 0
     }
 }
