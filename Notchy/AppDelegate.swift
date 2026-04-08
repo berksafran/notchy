@@ -57,10 +57,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Panel becomes key (user clicked it, or dialog was dismissed).
         // Stop hover-to-hide tracking; resign-key will handle hiding from here.
-        // NOTE: We intentionally do NOT call endHover() here because if a system
-        // permission dialog was dismissed, the panel is still hovered and the notch
-        // pill should remain visible. NotchWindow.checkMouse() handles any shrink
-        // needed when the mouse actually leaves the notch area.
         NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
             object: panel,
@@ -70,7 +66,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if self.panelOpenedViaHover {
                 self.panelOpenedViaHover = false
                 self.stopHoverTracking()
-                // Do NOT call endHover() — let checkMouse() decide naturally.
             }
         }
     }
@@ -102,7 +97,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setupHotkey() {
-        // Global monitor: fires when another app is focused (backtick = keyCode 50)
         hotkeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard event.keyCode == 50,
                   event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.function).isEmpty
@@ -118,6 +112,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let screen = NSScreen.builtIn { panel.showPanelCentered(on: screen) }
         panelOpenedViaHover = true
         startHoverTracking()
+        notchWindow?.orderFrontRegardless() // Keep notch on top of the newly shown panel
     }
 
 
@@ -162,7 +157,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard hoverHideTimer == nil else { return }
         hoverHideTimer = Timer.scheduledTimer(withTimeInterval: hoverHideDelay, repeats: false) { [weak self] _ in
             guard let self else { return }
-            // Re-check one more time before hiding (mouse may have returned)
             let mouse = NSEvent.mouseLocation
             let inNotch = self.notchWindow?.frame.insetBy(dx: -self.hoverMargin, dy: -self.hoverMargin).contains(mouse) ?? false
             let inPanel = self.panel.frame.insetBy(dx: -self.hoverMargin, dy: -self.hoverMargin).contains(mouse)

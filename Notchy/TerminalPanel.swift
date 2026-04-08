@@ -52,7 +52,7 @@ class TerminalPanel: NSPanel {
 
     private func configureWindow() {
         isFloatingPanel = true
-        level = .floating
+        level = .statusBar // Match NotchWindow level for perfect overlap without Z-fighting or plane gaps
         isMovableByWindowBackground = true
         isMovable = true
         backgroundColor = .clear
@@ -94,7 +94,7 @@ class TerminalPanel: NSPanel {
     /// Core show implementation — eliminates duplicated code from the two public entry-points.
     private func showPanel(centeredAt midX: CGFloat, screen: NSScreen) {
         let notchH = notchHeight(for: screen)
-        let finalY = screen.frame.maxY - notchH - frame.height + 2  // +2 overlaps the NotchWindow by 2pt to close the seam
+        let finalY = screen.frame.maxY - notchH - frame.height + 1 // +1 overlap to stay flush but not pushed too far up
         let targetX = midX - frame.width / 2
 
         if isVisible {

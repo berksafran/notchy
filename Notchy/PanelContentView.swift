@@ -23,10 +23,10 @@ struct PanelContentView: View {
             }
         }
         .background(VisualEffectView(material: .hudWindow, blendingMode: .behindWindow))
-        .clipShape(ClassicPanelShape(cornerRadius: 20))
+        .clipShape(ClassicPanelShape(cornerRadius: 20, skipTopEdge: true))
         .overlay(
-            ClassicPanelShape(cornerRadius: 20)
-                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            ClassicPanelShape(cornerRadius: 20, skipTopEdge: true)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
         )
     }
 
@@ -275,16 +275,24 @@ struct NotchBar: View {
 /// flush on top of the panel. The Hap's bottom edge is flat so the panel's top must be square.
 struct ClassicPanelShape: Shape {
     let cornerRadius: CGFloat
+    var skipTopEdge: Bool = false
 
     func path(in rect: CGRect) -> Path {
         let r = cornerRadius
         var path = Path()
-        // Top-left: sharp
-        path.move(to: CGPoint(x: 0, y: 0))
-        // Top-right: sharp
-        path.addLine(to: CGPoint(x: rect.width, y: 0))
-        // Bottom-right: rounded
+        
+        if skipTopEdge {
+            // Start from the top-right and go around, skipping the top horizontal line
+            path.move(to: CGPoint(x: rect.width, y: 0))
+        } else {
+            path.move(to: CGPoint(x: 0, y: 0))
+            path.addLine(to: CGPoint(x: rect.width, y: 0))
+        }
+        
+        // Right edge
         path.addLine(to: CGPoint(x: rect.width, y: rect.height - r))
+        
+        // Bottom-right corner
         path.addArc(
             center: CGPoint(x: rect.width - r, y: rect.height - r),
             radius: r,
@@ -292,8 +300,11 @@ struct ClassicPanelShape: Shape {
             endAngle: .degrees(90),
             clockwise: false
         )
-        // Bottom-left: rounded
+        
+        // Bottom edge
         path.addLine(to: CGPoint(x: r, y: rect.height))
+        
+        // Bottom-left corner
         path.addArc(
             center: CGPoint(x: r, y: rect.height - r),
             radius: r,
@@ -301,8 +312,15 @@ struct ClassicPanelShape: Shape {
             endAngle: .degrees(180),
             clockwise: false
         )
-        path.addLine(to: CGPoint(x: 0, y: 0))
-        path.closeSubpath()
+        
+        // Left edge
+        if skipTopEdge {
+            path.addLine(to: CGPoint(x: 0, y: 0))
+        } else {
+            path.addLine(to: CGPoint(x: 0, y: 0))
+            path.closeSubpath()
+        }
+        
         return path
     }
 }
