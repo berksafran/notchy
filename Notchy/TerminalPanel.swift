@@ -28,7 +28,7 @@ class TerminalPanel: NSPanel {
 
     private let sessionStore: SessionStore
     /// Saved full-height used to restore when expanding after a collapse.
-    private var expandedHeight: CGFloat = 500
+    private var expandedHeight: CGFloat = 500 * CGFloat(SettingsManager.shared.scale)
 
     // MARK: Init
 
@@ -36,7 +36,7 @@ class TerminalPanel: NSPanel {
         self.sessionStore = sessionStore
 
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 864, height: 480),
+            contentRect: NSRect(x: 0, y: 0, width: 864 * CGFloat(SettingsManager.shared.scale), height: 480 * CGFloat(SettingsManager.shared.scale)),
             styleMask: [.borderless, .resizable, .fullSizeContentView, .nonactivatingPanel],
             backing: .buffered,
             defer: true
@@ -60,7 +60,8 @@ class TerminalPanel: NSPanel {
         isOpaque = false
         animationBehavior = .none
         hidesOnDeactivate = false
-        minSize = NSSize(width: 660, height: 480)
+        let s = SettingsManager.shared.scale
+        minSize = NSSize(width: 660 * s, height: 480 * s)
     }
 
     private func registerNotifications() {
@@ -76,6 +77,8 @@ class TerminalPanel: NSPanel {
                            name: .NotchyExpandPanel, object: nil)
         center.addObserver(self, selector: #selector(handleToggleExpandNotification),
                            name: .NotchyToggleExpand, object: nil)
+        center.addObserver(self, selector: #selector(handleSettingsChanged),
+                           name: .NotchySettingsChanged, object: nil)
     }
 
     // MARK: - Show / Hide
@@ -187,6 +190,32 @@ class TerminalPanel: NSPanel {
             ctx.duration = 0.35
             ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             toggleExpand()
+        }
+    }
+
+    @objc private func handleSettingsChanged() {
+        let s = SettingsManager.shared.scale
+        minSize = NSSize(width: 660 * s, height: 480 * s)
+        expandedHeight = 500 * s
+        
+        // If visible, update frame size symmetrically with animation
+        if isVisible {
+            let newWidth = 864 * CGFloat(s)
+            let newHeight = 480 * CGFloat(s)
+            
+            let center = NSPoint(x: frame.midX, y: frame.maxY) // Anchor to top-center
+            let targetFrame = NSRect(
+                x: center.x - newWidth / 2,
+                y: center.y - newHeight,
+                width: newWidth,
+                height: newHeight
+            )
+            
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.3
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                self.animator().setFrame(targetFrame, display: true)
+            }
         }
     }
 

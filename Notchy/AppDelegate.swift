@@ -96,7 +96,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.panel.isVisible ?? false
         }
         notchWindow?.panelWidth = { [weak self] in
-            (self?.panel.frame.width ?? 864) + 16
+            let scale = SettingsManager.shared.scale
+            // Use theoretical final width so Notch and Panel can animate together
+            return (864.0 * scale) + 16.0
         }
     }
 

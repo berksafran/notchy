@@ -33,6 +33,9 @@ class SettingsManager {
             }
         }
     }
+    var scale: Double {
+        didSet { UserDefaults.standard.set(scale, forKey: Keys.scale) }
+    }
 
     // MARK: Init
 
@@ -45,6 +48,7 @@ class SettingsManager {
             Keys.claudeIntegration: true,
             Keys.revealOnHover:    true,
             Keys.preferredScreenID: 0, // 0 means use built-in / default logic
+            Keys.scale:            1.0,
         ])
 
         showNotch                = defaults.bool(forKey: Keys.showNotch)
@@ -53,6 +57,8 @@ class SettingsManager {
         revealOnHover            = defaults.bool(forKey: Keys.revealOnHover)
         let savedID = UInt32(defaults.integer(forKey: Keys.preferredScreenID))
         preferredScreenID = savedID == 0 ? nil : savedID
+        scale             = defaults.double(forKey: Keys.scale)
+        if scale == 0 { scale = 1.0 }
     }
 
     // MARK: - Keys
@@ -63,5 +69,6 @@ class SettingsManager {
         static let claudeIntegration = "claudeIntegrationEnabled"
         static let revealOnHover    = "revealOnHover"
         static let preferredScreenID = "preferredScreenID"
+        static let scale            = "uiScale"
     }
 }

@@ -82,6 +82,7 @@ class NotchWindow: NSPanel {
         setupMouseTracking()
         observeScreenChanges()
         observeStatusChanges()
+        observeSettingsChanges()
     }
 
     private func configureWindow() {
@@ -164,9 +165,26 @@ class NotchWindow: NSPanel {
 
     /// Called when the panel layout changes externally (e.g. screen resolution switch or monitor preference change).
     func layoutDidChange() {
-        isHovered = false
         detectNotchSize()
-        positionAtNotch()
+        let targetWidth = currentTargetWidth()
+        
+        // If the window is on screen and the width change is significant, animate it.
+        // This ensures the notch matches the terminal's scaling animation.
+        if isVisible && abs(frame.width - targetWidth) > 1 {
+            animateWidthTransition(to: targetWidth)
+        } else {
+            positionAtNotch()
+        }
+    }
+
+    private func observeSettingsChanges() {
+        NotificationCenter.default.addObserver(
+            forName: .NotchySettingsChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.layoutDidChange()
+        }
     }
 
     /// Called when the panel hides — forces the notch back to normal (un-hovered) size.
@@ -238,11 +256,18 @@ class NotchWindow: NSPanel {
             }
 
         case (true, true):
-            // Already expanded — cancel any pending collapse and check if width changed.
-            // Skip if hover is active or animating — hover already manages the target width.
+            // Already expanded — check if width changed (including while hovered)
             collapseDebounceTimer?.invalidate()
             collapseDebounceTimer = nil
-            guard !isHoverTransitioning, !isHovered else { break }
+            guard !isHoverTransitioning else { break }
+            let targetWidth = currentTargetWidth()
+            if abs(frame.width - targetWidth) > 1 {
+                animateWidthTransition(to: targetWidth)
+            }
+
+        case (false, false):
+            // Handle idle or hovered width changes
+            guard !isHoverTransitioning else { break }
             let targetWidth = currentTargetWidth()
             if abs(frame.width - targetWidth) > 1 {
                 animateWidthTransition(to: targetWidth)
@@ -320,6 +345,7 @@ class NotchWindow: NSPanel {
         let startTime   = CACurrentMediaTime()
         let duration    = 0.3
 
+        isHoverTransitioning = true
         activeDisplayLink?.stop()
         activeDisplayLink = CVDisplayLinkWrapper { [weak self] in
             guard let self else { return false }
@@ -327,8 +353,12 @@ class NotchWindow: NSPanel {
             let ease = Self.easeInOut(t)
             let x    = startFrame.origin.x + (targetFrame.origin.x - startFrame.origin.x) * ease
             let w    = startFrame.width    + (targetFrame.width    - startFrame.width)    * ease
+            
             DispatchQueue.main.async {
                 self.setFrame(NSRect(x: x, y: self.frame.origin.y, width: w, height: self.frame.height), display: true)
+                if t >= 1.0 {
+                    self.isHoverTransitioning = false
+                }
             }
             return t < 1.0
         }
@@ -492,9 +522,9 @@ class NotchWindow: NSPanel {
     private func currentTargetWidth(forHovered hovered: Bool? = nil, forExpanded expanded: Bool? = nil) -> CGFloat {
         let hovering = hovered ?? isHovered
         if hovering {
-            return panelWidth?() ?? notchWidth + 160
+            return (panelWidth?() ?? notchWidth + 160)
         }
-        return notchWidth * 1.5
+        return notchWidth * 1.5 * SettingsManager.shared.scale
     }
 
     /// A frame centered on screen at the notch Y position with `baseNotchHeight`.

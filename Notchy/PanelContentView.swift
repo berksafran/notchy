@@ -118,7 +118,7 @@ struct PanelContentView: View {
                 
                 SettingsSection(title: "General") {
                     SettingToggleRow(title: "Show notch overlay", description: "Display the Hap overlay above the terminal panel.", isOn: $settings.showNotch)
-                        .onChange(of: settings.showNotch) {
+                        .onChange(of: settings.showNotch) { oldValue, newValue in
                             NotificationCenter.default.post(name: .NotchySettingsChanged, object: nil)
                         }
                     SettingToggleRow(title: "Reveal panel on hover", description: "Automatically open the terminal panel when hovering over the notch.", isOn: $settings.revealOnHover)
@@ -139,7 +139,21 @@ struct PanelContentView: View {
                                 .tag(CGDirectDisplayID?.some(screen.displayID))
                         }
                     }
-                    .onChange(of: settings.preferredScreenID) {
+                    .onChange(of: settings.preferredScreenID) { oldValue, newValue in
+                        NotificationCenter.default.post(name: .NotchySettingsChanged, object: nil)
+                    }
+
+                    SettingPickerRow(
+                        title: "Scale",
+                        description: "Choose the size of the notch and terminal panel.",
+                        selection: $settings.scale
+                    ) {
+                        Text("100% (Default)").tag(1.0)
+                        Text("125%").tag(1.25)
+                        Text("150%").tag(1.5)
+                        Text("175%").tag(1.75)
+                    }
+                    .onChange(of: settings.scale) { oldValue, newValue in
                         NotificationCenter.default.post(name: .NotchySettingsChanged, object: nil)
                     }
                 }

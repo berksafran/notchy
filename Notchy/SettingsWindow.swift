@@ -50,6 +50,16 @@ struct GeneralTab: View {
             Toggle("Reveal panel on hover", isOn: $settings.revealOnHover)
                 .help("If disabled, click the notch or use the hotkey to open the terminal.")
             Toggle("Enable sounds", isOn: $settings.soundsEnabled)
+
+            Picker("Scale", selection: $settings.scale) {
+                Text("100% (Default)").tag(1.0)
+                Text("125%").tag(1.25)
+                Text("150%").tag(1.5)
+                Text("175%").tag(1.75)
+            }
+            .onChange(of: settings.scale) { oldValue, newValue in
+                NotificationCenter.default.post(name: .NotchySettingsChanged, object: nil)
+            }
         }
         .toggleStyle(.switch)
         .tint(.blue)
